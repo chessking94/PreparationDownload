@@ -153,7 +153,11 @@ def processfiles():
 
     name_set = set()
     for f in file_list:
-        nm = f.split('_')[1]
+        #nm = f.split('_')[1]
+        # this allows to extract names/usernames that might have an "_" character in them
+        s_idx = f.index('_') + 1
+        e_idx = f.index('_AllGames_')
+        nm = f[s_idx:e_idx]
         name_set.add(nm)
 
     player_name = list(name_set)[0]
@@ -172,9 +176,7 @@ def processfiles():
             os.remove(fname_relpath)
     
     # sort game file
-    pgn = open(merge_name)
-    sort_name = os.path.splitext(merge_name)[0] + '_Sorted' + os.path.splitext(merge_name)[1]
-    sort_file = open(os.path.join(output_path, sort_name), 'w')
+    pgn = open(merge_name, mode='r', encoding='utf-8', errors='ignore')
 
     idx = []
     game_date = []
@@ -188,9 +190,12 @@ def processfiles():
         gm_txt = chess.pgn.read_game(pgn)
         gm_idx = gm_idx + 1
 
+    sort_name = os.path.splitext(merge_name)[0] + '_Sorted' + os.path.splitext(merge_name)[1]
+    sort_file = open(os.path.join(output_path, sort_name), 'w')
     idx_sort = [x for _, x in sorted(zip(game_date, idx))]
     for i in idx_sort:
-        sort_file.write(str(game_text[i]) + '\n\n')
+        txt = str(game_text[i]).encode(encoding='utf-8', errors='replace')
+        sort_file.write(str(txt) + '\n\n')
     sort_file.close()  
     pgn.close()
 
