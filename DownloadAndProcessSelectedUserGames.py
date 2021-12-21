@@ -5,6 +5,7 @@ from urllib import request, error
 import json
 import os
 import re
+import shutil as sh
 import chess
 import chess.pgn
 
@@ -250,7 +251,19 @@ def processfiles():
     os.remove(os.path.join(output_path, bl_tag_file))
     os.remove(os.path.join(output_path, merge_name))
 
+def archiveold():
+    output_path = r'C:\Users\eehunt\Documents\Chess\Scripts\output'
+    archive_path = r'C:\Users\eehunt\Documents\Chess\Scripts\output\old'
+
+    file_list = [f for f in os.listdir(output_path) if os.path.isfile(os.path.join(output_path, f))] # lists only files in directory, no subfolders
+    if len(file_list) > 0:
+        for file in file_list:
+            old_name = os.path.join(output_path, file)
+            new_name = os.path.join(archive_path, file)
+            sh.move(old_name, new_name)
+
 def main():
+    archiveold()
     lichessgames()
     chesscomgames()
     processfiles()
