@@ -5,6 +5,7 @@ from urllib import request, error
 import json
 import os
 import re
+import fileinput
 import shutil as sh
 import chess
 import chess.pgn
@@ -154,7 +155,6 @@ def processfiles():
 
     name_set = set()
     for f in file_list:
-        #nm = f.split('_')[1]
         # this allows to extract names/usernames that might have an "_" character in them
         s_idx = f.index('_') + 1
         e_idx = f.index('_AllGames_')
@@ -218,17 +218,30 @@ def processfiles():
     if os.getcwd != output_path:
         os.chdir(output_path)
     os.system('cmd /C ' + cmd_text)
-
+    
+    # update correspondence game TimeControl tag; missing from Lichess games
+    updated_tc_name = os.path.splitext(sort_name)[0] + '_TimeControlFixed' + os.path.splitext(sort_name)[1]
+    ofile = os.path.join(output_path, sort_name)
+    nfile = os.path.join(output_path, updated_tc_name)
+    searchExp = '[TimeControl "-"]'
+    replaceExp = '[TimeControl "1/86400"]'
+    wfile = open(nfile, 'w')
+    for line in fileinput.input(ofile):
+        if searchExp in line:
+            line = line.replace(searchExp, replaceExp)
+        wfile.write(line)
+    wfile.close()
+    
     """ If I want to remove bullet games, need to ensure all Daily/Correspondence games have time controls otherwise they are removed as well
     # remove bullet games
     new_file = 'NoBullet_' + merge_name
-    cmd_text = 'pgn-extract --quiet -t' + tc_tag_file + ' --output ' + new_file + ' ' + sort_name
+    cmd_text = 'pgn-extract --quiet -t' + tc_tag_file + ' --output ' + new_file + ' ' + updated_tc_name
     if os.getcwd != output_path:
         os.chdir(output_path)
     os.system('cmd /C ' + cmd_text)
     """
 
-    new_file = sort_name #uncomment this line and comment out above bullet block if leaving bullet games in
+    new_file = updated_tc_name #uncomment this line and comment out above bullet block if leaving bullet games in
 
     # create White file
     new_white = 'White_' + new_file
@@ -250,6 +263,7 @@ def processfiles():
     os.remove(os.path.join(output_path, wh_tag_file))
     os.remove(os.path.join(output_path, bl_tag_file))
     os.remove(os.path.join(output_path, merge_name))
+    os.remove(os.path.join(output_path, sort_name))
 
 def archiveold():
     output_path = r'C:\Users\eehunt\Documents\Chess\Scripts\output'
