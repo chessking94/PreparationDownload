@@ -2,6 +2,7 @@ import datetime as dt
 import pyodbc as sql
 import pandas as pd
 from urllib import request, error
+import requests
 import json
 import os
 import re
@@ -22,25 +23,32 @@ def lichessgames():
     conn.close()
 
     if rec_ct > 0:
+        # get auth token
+        fpath = r'C:\Users\eehunt\Repository'
+        fname = 'keys.json'
+        with open(os.path.join(fpath, fname), 'r') as f:
+            json_data = json.load(f)
+        token_value = json_data.get('LichessAPIToken')
+
         # get pgns
         for i in users:
             dte_val = dt.datetime.now().strftime('%Y%m%d%H%M%S')
-            """TODO Look into using authentication to speed up a bit, iterating over URL's is slow"""
             dload_url = 'https://lichess.org/api/games/user/' + i[1] + '?until=' + utc_monthstart
             dload_name = i[1] + '_' + dte_val + '.pgn'
             dload_file = os.path.join(dload_path, dload_name)
-            try:
-                request.urlretrieve(dload_url, dload_file)
-                with open(dload_file, mode='r', encoding='utf-8', errors='ignore') as dl:
-                    lines = dl.read()
-                txt_old = '"' + i[1] + '"'
-                txt_new = '"' + i[0] + '"'
-                lines = re.sub(txt_old, txt_new, lines, flags=re.IGNORECASE)
-                with open(dload_file, mode='w', encoding='utf-8', errors='ignore') as dl:
-                    dl.write(lines)
-            except error.HTTPError.code as e:
-                err = e.getcode()
-                print(str(err) + ' error on ' + i[1])
+            hdr = {'Authorization': 'Bearer ' + token_value}
+            # add error handling if url is bad
+            with requests.get(dload_url, headers=hdr, stream=True) as resp:
+                with open(dload_file, 'wb') as f:
+                    for chunk in resp.iter_content(chunk_size=8196):
+                        f.write(chunk)
+            with open(dload_file, mode='r', encoding='utf-8', errors='ignore') as dl:
+                lines = dl.read()
+            txt_old = '"' + i[1] + '"'
+            txt_new = '"' + i[0] + '"'
+            lines = re.sub(txt_old, txt_new, lines, flags=re.IGNORECASE)
+            with open(dload_file, mode='w', encoding='utf-8', errors='ignore') as dl:
+                dl.write(lines)
 
         # merge and clean pgns
         dte_val = dt.datetime.now().strftime("%Y%m%d%H%M%S")
@@ -106,6 +114,7 @@ def chesscomgames():
                     mm = url[-2:]
                     dload_name = i[1] + '_' + yyyy + mm + '.pgn'
                     dload_file = os.path.join(dload_path, dload_name)
+                    """ TODO - switch urlretrieve to requests.get as in lichess method"""
                     request.urlretrieve(dload_url, dload_file)
                     with open(dload_file, mode='r', encoding='utf-8', errors='ignore') as dl:
                         lines = dl.read()
