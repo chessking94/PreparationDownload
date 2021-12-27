@@ -11,12 +11,18 @@ import shutil as sh
 import chess
 import chess.pgn
 
+"""
+TODO Want player name in final pgn(s) to be Last, First format, not LastFirst
+Due to the presence of a comma, it isn't a simple swap. Need to review more carefully to get it to work
+"""
+
 def lichessgames():
     dload_path = r'C:\Users\eehunt\Documents\Chess\Scripts\Lichess'
     dte = dt.datetime.now()
     utc_monthstart = str(int(dte.replace(tzinfo=dt.timezone.utc).timestamp())) + '000' # because I'm lazy I'll hard-code the milli/micro/nanoseconds
 
     conn = sql.connect('Driver={ODBC Driver 17 for SQL Server};Server=HUNT-PC1;Database=ChessAnalysis;Trusted_Connection=yes;')        
+    #qry_text = "SELECT ISNULL(LastName, '') + ', ' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE EEHFlag = 0 AND Source = 'Lichess' AND DownloadFlag = 1"
     qry_text = "SELECT ISNULL(LastName, '') + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE EEHFlag = 0 AND Source = 'Lichess' AND DownloadFlag = 1"
     users = pd.read_sql(qry_text, conn).values.tolist()
     rec_ct = len(users)
@@ -37,18 +43,20 @@ def lichessgames():
             dload_name = i[1] + '_' + dte_val + '.pgn'
             dload_file = os.path.join(dload_path, dload_name)
             hdr = {'Authorization': 'Bearer ' + token_value}
-            # add error handling if url is bad
             with requests.get(dload_url, headers=hdr, stream=True) as resp:
-                with open(dload_file, 'wb') as f:
-                    for chunk in resp.iter_content(chunk_size=8196):
-                        f.write(chunk)
-            with open(dload_file, mode='r', encoding='utf-8', errors='ignore') as dl:
-                lines = dl.read()
-            txt_old = '"' + i[1] + '"'
-            txt_new = '"' + i[0] + '"'
-            lines = re.sub(txt_old, txt_new, lines, flags=re.IGNORECASE)
-            with open(dload_file, mode='w', encoding='utf-8', errors='ignore') as dl:
-                dl.write(lines)
+                if resp.status_code != 200:
+                    print('Unable to complete request! Request returned code ' + resp.status_code)
+                else:
+                    with open(dload_file, 'wb') as f:
+                        for chunk in resp.iter_content(chunk_size=8196):
+                            f.write(chunk)
+                    with open(dload_file, mode='r', encoding='utf-8', errors='ignore') as dl:
+                        lines = dl.read()
+                    txt_old = '"' + i[1] + '"'
+                    txt_new = '"' + i[0] + '"'
+                    lines = re.sub(txt_old, txt_new, lines, flags=re.IGNORECASE)
+                    with open(dload_file, mode='w', encoding='utf-8', errors='ignore') as dl:
+                        dl.write(lines)
 
         # merge and clean pgns
         dte_val = dt.datetime.now().strftime("%Y%m%d%H%M%S")
@@ -88,6 +96,7 @@ def chesscomgames():
     dte = dt.datetime.now().strftime("%Y%m%d%H%M%S")
 
     conn = sql.connect('Driver={ODBC Driver 17 for SQL Server};Server=HUNT-PC1;Database=ChessAnalysis;Trusted_Connection=yes;')        
+    #qry_text = "SELECT ISNULL(LastName, '') + ', ' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE EEHFlag = 0 AND Source = 'Chess.com' AND DownloadFlag = 1"
     qry_text = "SELECT ISNULL(LastName, '') + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE EEHFlag = 0 AND Source = 'Chess.com' AND DownloadFlag = 1"
     users = pd.read_sql(qry_text, conn).values.tolist()
     rec_ct = len(users)
@@ -171,6 +180,7 @@ def processfiles():
         name_set.add(nm)
 
     player_name = list(name_set)[0]
+    #player_name_file = player_name.replace(', ', '')
     merge_name = player_name + '_AllGames_' + dte + '.pgn'
     
     cmd_text = 'copy /B *.pgn ' + merge_name
