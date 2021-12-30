@@ -13,8 +13,6 @@ import chess.pgn
 
 def lichessgames():
     dload_path = r'C:\Users\eehunt\Documents\Chess\Scripts\Lichess'
-    dte = dt.datetime.now()
-    utc_monthstart = str(int(dte.replace(tzinfo=dt.timezone.utc).timestamp())) + '000' # because I'm lazy I'll hard-code the milli/micro/nanoseconds
 
     conn = sql.connect('Driver={ODBC Driver 17 for SQL Server};Server=HUNT-PC1;Database=ChessAnalysis;Trusted_Connection=yes;')        
     qry_text = "SELECT ISNULL(LastName, '') + '-' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE EEHFlag = 0 AND Source = 'Lichess' AND DownloadFlag = 1"
@@ -33,11 +31,10 @@ def lichessgames():
         # get pgns
         for i in users:
             dte_val = dt.datetime.now().strftime('%Y%m%d%H%M%S')
-            dload_url = 'https://lichess.org/api/games/user/' + i[1] + '?until=' + utc_monthstart
+            dload_url = 'https://lichess.org/api/games/user/' + i[1] + '?perfType=bullet,blitz,rapid,classical,correspondence&sort=dateAsc'
             dload_name = i[1] + '_' + dte_val + '.pgn'
             dload_file = os.path.join(dload_path, dload_name)
             hdr = {'Authorization': 'Bearer ' + token_value}
-            """ TODO Find way to only download standard games, no variants """
             with requests.get(dload_url, headers=hdr, stream=True) as resp:
                 if resp.status_code != 200:
                     print('Unable to complete request! Request returned code ' + resp.status_code)
@@ -54,7 +51,7 @@ def lichessgames():
                         dl.write(lines)
 
         # merge and clean pgns
-        dte_val = dt.datetime.now().strftime("%Y%m%d%H%M%S")
+        dte_val = dt.datetime.now().strftime('%Y%m%d%H%M%S')
         if rec_ct == 1:
             merge_name = dload_name
             clean_name = 'Lichess_' + users[0][0] + '_AllGames_' + dte_val + '.pgn'
@@ -88,7 +85,7 @@ def lichessgames():
 
 def chesscomgames():
     dload_path = r'C:\Users\eehunt\Documents\Chess\Scripts\ChessCom'
-    dte = dt.datetime.now().strftime("%Y%m%d%H%M%S")
+    dte = dt.datetime.now().strftime('%Y%m%d%H%M%S')
 
     conn = sql.connect('Driver={ODBC Driver 17 for SQL Server};Server=HUNT-PC1;Database=ChessAnalysis;Trusted_Connection=yes;')        
     qry_text = "SELECT ISNULL(LastName, '') + '-' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE EEHFlag = 0 AND Source = 'Chess.com' AND DownloadFlag = 1"
@@ -118,7 +115,6 @@ def chesscomgames():
                     dload_name = i[1] + '_' + yyyy + mm + '.pgn'
                     dload_file = os.path.join(dload_path, dload_name)
                     """ TODO Switch urlretrieve to requests.get as in lichess method"""
-                    """ TODO Find way to only download standard games, no variants """
                     request.urlretrieve(dload_url, dload_file)
                     with open(dload_file, mode='r', encoding='utf-8', errors='ignore') as dl:
                         lines = dl.read()
@@ -146,23 +142,47 @@ def chesscomgames():
             os.chdir(dload_path)
         os.system('cmd /C ' + cmd_text)
 
+        # remove any non-standard games remaining; Chess.com standard games omit the Variant tag
+        pgn = open(os.path.join(dload_path, clean_name), mode='r', encoding='utf-8', errors='ignore')
+        updated_clean_name = os.path.splitext(clean_name)[0] + '_NoVariant' + os.path.splitext(clean_name)[1]
+        pgn_new = open(os.path.join(dload_path, updated_clean_name), 'w')
+        gm_txt = chess.pgn.read_game(pgn)
+        while gm_txt is not None:
+            try:
+                variant_tag = gm_txt.headers["Variant"]
+            except:
+                variant_tag = 'Standard'
+            if variant_tag == 'Standard':
+                txt = str(gm_txt).encode(encoding='utf-8', errors='replace')
+                pgn_new.write(str(txt) + '\n\n')
+            gm_txt = chess.pgn.read_game(pgn)
+        pgn.close()
+        pgn_new.close()
+
+        # need to rerun a dummy pgn-extract basically to reformat file from bytes to standard pgn
+        updated_clean_name2 = os.path.splitext(updated_clean_name)[0] + 's' + os.path.splitext(updated_clean_name)[1]
+        cmd_text = 'pgn-extract -C -N -V -D -pl2 --quiet --nosetuptags --output ' + updated_clean_name2 + ' ' + updated_clean_name
+        if os.getcwd != dload_path:
+            os.chdir(dload_path)
+        os.system('cmd /C ' + cmd_text)
+
         # delete old files
         dir_files = [f for f in os.listdir(dload_path) if os.path.isfile(os.path.join(dload_path, f))]
         for filename in dir_files:
-            if filename != clean_name:
+            if filename != updated_clean_name2:
                 fname_relpath = os.path.join(dload_path, filename)
                 os.remove(fname_relpath)
         
         # move to new folder
         output_path = r'C:\Users\eehunt\Documents\Chess\Scripts\output'
-        old_loc = os.path.join(dload_path, clean_name)
-        new_loc = os.path.join(output_path, clean_name)
+        old_loc = os.path.join(dload_path, updated_clean_name2)
+        new_loc = os.path.join(output_path, updated_clean_name2)
         os.rename(old_loc, new_loc)
     
     print('Chess.com game download complete')
 
 def processfiles():
-    dte = dt.datetime.now().strftime("%Y%m%d%H%M%S")
+    dte = dt.datetime.now().strftime('%Y%m%d%H%M%S')
     output_path = r'C:\Users\eehunt\Documents\Chess\Scripts\output'
     file_list = [f for f in os.listdir(output_path) if os.path.isfile(os.path.join(output_path, f))]
     
@@ -279,7 +299,9 @@ def processfiles():
     sort_file = open(os.path.join(output_path, sort_name), 'w')
     idx_sort = [x for _, x in sorted(zip(game_date, idx))]
     for i in idx_sort:
-        """ TODO Review whether changes are needed to encoding; the below works to avoid funny business with non-ascii characters but converts to bytes """
+        """ TODO Review whether changes are needed to encoding; the below works to avoid funny business with non-ascii characters but converts to bytes
+            Perhaps not worth worrying about since pgn-extract converts file back to normal pgn and this file gets deleted anyway
+        """
         txt = str(game_text[i]).encode(encoding='utf-8', errors='replace')
         sort_file.write(str(txt) + '\n\n')
         #sort_file.write(str(game_text[i]) + '\n\n') # might fail if funny character is present, but doesn't convert to bytes
