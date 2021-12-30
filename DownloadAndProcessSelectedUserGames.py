@@ -11,19 +11,13 @@ import shutil as sh
 import chess
 import chess.pgn
 
-"""
-TODO Want player name in final pgn(s) to be Last, First format, not LastFirst
-Due to the presence of a comma, it isn't a simple swap. Need to review more carefully to get it to work
-"""
-
 def lichessgames():
     dload_path = r'C:\Users\eehunt\Documents\Chess\Scripts\Lichess'
     dte = dt.datetime.now()
     utc_monthstart = str(int(dte.replace(tzinfo=dt.timezone.utc).timestamp())) + '000' # because I'm lazy I'll hard-code the milli/micro/nanoseconds
 
     conn = sql.connect('Driver={ODBC Driver 17 for SQL Server};Server=HUNT-PC1;Database=ChessAnalysis;Trusted_Connection=yes;')        
-    #qry_text = "SELECT ISNULL(LastName, '') + ', ' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE EEHFlag = 0 AND Source = 'Lichess' AND DownloadFlag = 1"
-    qry_text = "SELECT ISNULL(LastName, '') + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE EEHFlag = 0 AND Source = 'Lichess' AND DownloadFlag = 1"
+    qry_text = "SELECT ISNULL(LastName, '') + '-' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE EEHFlag = 0 AND Source = 'Lichess' AND DownloadFlag = 1"
     users = pd.read_sql(qry_text, conn).values.tolist()
     rec_ct = len(users)
     conn.close()
@@ -43,6 +37,7 @@ def lichessgames():
             dload_name = i[1] + '_' + dte_val + '.pgn'
             dload_file = os.path.join(dload_path, dload_name)
             hdr = {'Authorization': 'Bearer ' + token_value}
+            """ TODO Find way to only download standard games, no variants """
             with requests.get(dload_url, headers=hdr, stream=True) as resp:
                 if resp.status_code != 200:
                     print('Unable to complete request! Request returned code ' + resp.status_code)
@@ -53,7 +48,7 @@ def lichessgames():
                     with open(dload_file, mode='r', encoding='utf-8', errors='ignore') as dl:
                         lines = dl.read()
                     txt_old = '"' + i[1] + '"'
-                    txt_new = '"' + i[0] + '"'
+                    txt_new = '"' + i[0].replace('-', ', ') + '"'
                     lines = re.sub(txt_old, txt_new, lines, flags=re.IGNORECASE)
                     with open(dload_file, mode='w', encoding='utf-8', errors='ignore') as dl:
                         dl.write(lines)
@@ -96,8 +91,7 @@ def chesscomgames():
     dte = dt.datetime.now().strftime("%Y%m%d%H%M%S")
 
     conn = sql.connect('Driver={ODBC Driver 17 for SQL Server};Server=HUNT-PC1;Database=ChessAnalysis;Trusted_Connection=yes;')        
-    #qry_text = "SELECT ISNULL(LastName, '') + ', ' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE EEHFlag = 0 AND Source = 'Chess.com' AND DownloadFlag = 1"
-    qry_text = "SELECT ISNULL(LastName, '') + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE EEHFlag = 0 AND Source = 'Chess.com' AND DownloadFlag = 1"
+    qry_text = "SELECT ISNULL(LastName, '') + '-' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE EEHFlag = 0 AND Source = 'Chess.com' AND DownloadFlag = 1"
     users = pd.read_sql(qry_text, conn).values.tolist()
     rec_ct = len(users)
     conn.close()
@@ -123,12 +117,13 @@ def chesscomgames():
                     mm = url[-2:]
                     dload_name = i[1] + '_' + yyyy + mm + '.pgn'
                     dload_file = os.path.join(dload_path, dload_name)
-                    """ TODO - switch urlretrieve to requests.get as in lichess method"""
+                    """ TODO Switch urlretrieve to requests.get as in lichess method"""
+                    """ TODO Find way to only download standard games, no variants """
                     request.urlretrieve(dload_url, dload_file)
                     with open(dload_file, mode='r', encoding='utf-8', errors='ignore') as dl:
                         lines = dl.read()
                     txt_old = '"' + i[1] + '"'
-                    txt_new = '"' + i[0] + '"'
+                    txt_new = '"' + i[0].replace('-', ', ') + '"'
                     lines = re.sub(txt_old, txt_new, lines, flags=re.IGNORECASE)
                     with open(dload_file, mode='w', encoding='utf-8', errors='ignore') as dl:
                         dl.write(lines)
@@ -170,7 +165,7 @@ def processfiles():
     dte = dt.datetime.now().strftime("%Y%m%d%H%M%S")
     output_path = r'C:\Users\eehunt\Documents\Chess\Scripts\output'
     file_list = [f for f in os.listdir(output_path) if os.path.isfile(os.path.join(output_path, f))]
-
+    
     name_set = set()
     for f in file_list:
         # this allows to extract names/usernames that might have an "_" character in them
@@ -180,23 +175,93 @@ def processfiles():
         name_set.add(nm)
 
     player_name = list(name_set)[0]
-    #player_name_file = player_name.replace(', ', '')
-    merge_name = player_name + '_AllGames_' + dte + '.pgn'
+    merge_name = player_name.replace('-', '') + '_AllGames_' + dte + '.pgn'
     
     cmd_text = 'copy /B *.pgn ' + merge_name
     if os.getcwd != output_path:
         os.chdir(output_path)
     os.system('cmd /C ' + cmd_text)
-
-    # delete old files
+    
+    # delete original files
     dir_files = [f for f in os.listdir(output_path) if os.path.isfile(os.path.join(output_path, f))]
     for filename in dir_files:
         if filename != merge_name:
             fname_relpath = os.path.join(output_path, filename)
             os.remove(fname_relpath)
-    
+
+    # create tag files
+    wh_tag_file = 'WhiteTag.txt'
+    cmd_text = 'echo White "' + player_name.replace('-', ', ') + '" >> ' + wh_tag_file
+    if os.getcwd != output_path:
+        os.chdir(output_path)
+    os.system('cmd /C ' + cmd_text)
+
+    bl_tag_file = 'BlackTag.txt'
+    cmd_text = 'echo Black "' + player_name.replace('-', ', ') + '" >> ' + bl_tag_file
+    if os.getcwd != output_path:
+        os.chdir(output_path)
+    os.system('cmd /C ' + cmd_text)
+
+    # update correspondence game TimeControl tag; missing from Lichess games
+    updated_tc_name = os.path.splitext(merge_name)[0] + '_TimeControlFixed' + os.path.splitext(merge_name)[1]
+    ofile = os.path.join(output_path, merge_name)
+    nfile = os.path.join(output_path, updated_tc_name)
+    searchExp = '[TimeControl "-"]'
+    replaceExp = '[TimeControl "1/86400"]'
+    wfile = open(nfile, 'w')
+    for line in fileinput.input(ofile):
+        if searchExp in line:
+            line = line.replace(searchExp, replaceExp)
+        wfile.write(line)
+    wfile.close()
+
+    # option for filtering to certain time controls
+    tc_filter_option = False
+    tc_type = 'Blitz'
+    tc_options = ['Bullet', 'Blitz', 'Rapid', 'Classical', 'Correspondence']
+    # range for each time control, in seconds; values taken after reviewing Chess.com and Lichess criteria
+    tc_min_list = ['60', '180', '601', '1800', '86400']
+    tc_max_list = ['179', '600', '1799', '86399', '1209600']
+    if tc_filter_option and tc_type in tc_options:
+        i = 0
+        for t in tc_options:
+            if t == tc_type:
+                break # exit for loop; i will be the index needed
+            i = i + 1
+        tc_min = tc_min_list[i]
+        tc_max = tc_max_list[i]
+
+        # create time control tag files
+        tc_tag_file_min = 'TimeControlTagMin.txt'
+        tc_tag_file_min_full = os.path.join(output_path, tc_tag_file_min)
+        tc_txt = 'TimeControl >= "' + tc_min + '"'
+        with open(tc_tag_file_min_full, 'w') as mn:
+            mn.write(tc_txt)
+        
+        tc_tag_file_max = 'TimeControlTagMax.txt'
+        tc_tag_file_max_full = os.path.join(output_path, tc_tag_file_max)
+        tc_txt = 'TimeControl <= "' + tc_max + '"'
+        with open(tc_tag_file_max_full, 'w') as mx:
+            mx.write(tc_txt)
+      
+        # filter min time control
+        tmp_file = 'temp' + tc_type + '_' + merge_name
+        cmd_text = 'pgn-extract --quiet -t' + tc_tag_file_min + ' --output ' + tmp_file + ' ' + updated_tc_name
+        if os.getcwd != output_path:
+            os.chdir(output_path)
+        os.system('cmd /C ' + cmd_text)
+
+        # filter max time control
+        new_file = tc_type + '_' + merge_name
+        cmd_text = 'pgn-extract --quiet -t' + tc_tag_file_max + ' --output ' + new_file + ' ' + tmp_file
+        if os.getcwd != output_path:
+            os.chdir(output_path)
+        os.system('cmd /C ' + cmd_text)
+    else:
+        new_file = updated_tc_name
+
     # sort game file
-    pgn = open(merge_name, mode='r', encoding='utf-8', errors='ignore')
+    pgn = open(os.path.join(output_path, new_file), mode='r', encoding='utf-8', errors='ignore')
 
     idx = []
     game_date = []
@@ -209,75 +274,43 @@ def processfiles():
         game_text.append(gm_txt)
         gm_txt = chess.pgn.read_game(pgn)
         gm_idx = gm_idx + 1
-
-    sort_name = os.path.splitext(merge_name)[0] + '_Sorted' + os.path.splitext(merge_name)[1]
+    
+    sort_name = os.path.splitext(updated_tc_name)[0] + '_Sorted' + os.path.splitext(updated_tc_name)[1]
     sort_file = open(os.path.join(output_path, sort_name), 'w')
     idx_sort = [x for _, x in sorted(zip(game_date, idx))]
     for i in idx_sort:
+        """ TODO Review whether changes are needed to encoding; the below works to avoid funny business with non-ascii characters but converts to bytes """
         txt = str(game_text[i]).encode(encoding='utf-8', errors='replace')
         sort_file.write(str(txt) + '\n\n')
+        #sort_file.write(str(game_text[i]) + '\n\n') # might fail if funny character is present, but doesn't convert to bytes
     sort_file.close()  
     pgn.close()
 
-    # create tag files
-    tc_tag_file = 'TimeControlTag.txt'
-    cmd_text = 'echo "TimeControl >= 180" >> ' + tc_tag_file
-    if os.getcwd != output_path:
-        os.chdir(output_path)
-    os.system('cmd /C ' + cmd_text)
-
-    wh_tag_file = 'WhiteTag.txt'
-    cmd_text = 'echo White "' + player_name + '" >> ' + wh_tag_file
-    if os.getcwd != output_path:
-        os.chdir(output_path)
-    os.system('cmd /C ' + cmd_text)
-
-    bl_tag_file = 'BlackTag.txt'
-    cmd_text = 'echo Black "' + player_name + '" >> ' + bl_tag_file
-    if os.getcwd != output_path:
-        os.chdir(output_path)
-    os.system('cmd /C ' + cmd_text)
-    
-    # update correspondence game TimeControl tag; missing from Lichess games
-    updated_tc_name = os.path.splitext(sort_name)[0] + '_TimeControlFixed' + os.path.splitext(sort_name)[1]
-    ofile = os.path.join(output_path, sort_name)
-    nfile = os.path.join(output_path, updated_tc_name)
-    searchExp = '[TimeControl "-"]'
-    replaceExp = '[TimeControl "1/86400"]'
-    wfile = open(nfile, 'w')
-    for line in fileinput.input(ofile):
-        if searchExp in line:
-            line = line.replace(searchExp, replaceExp)
-        wfile.write(line)
-    wfile.close()
-    
-    """ If I want to remove bullet games, need to ensure all Daily/Correspondence games have time controls otherwise they are removed as well
-    # remove bullet games
-    new_file = 'NoBullet_' + merge_name
-    cmd_text = 'pgn-extract --quiet -t' + tc_tag_file + ' --output ' + new_file + ' ' + updated_tc_name
-    if os.getcwd != output_path:
-        os.chdir(output_path)
-    os.system('cmd /C ' + cmd_text)
-    """
-
-    new_file = updated_tc_name #uncomment this line and comment out above bullet block if leaving bullet games in
-
     # create White file
-    new_white = 'White_' + new_file
-    cmd_text = 'pgn-extract --quiet -t' + wh_tag_file + ' --output ' + new_white + ' ' + new_file
+    if tc_filter_option and tc_type in tc_options:
+        new_white = 'White_' + player_name.replace('-', '') + '_' + tc_type + '_' + dte + '.pgn'
+        new_black = 'Black_' + player_name.replace('-', '') + '_' + tc_type + '_' + dte + '.pgn'
+    else:
+        new_white = 'White_' + player_name.replace('-', '') + '_All_' + dte + '.pgn'
+        new_black = 'Black_' + player_name.replace('-', '') + '_All_' + dte + '.pgn'
+
+    cmd_text = 'pgn-extract --quiet -t' + wh_tag_file + ' --output ' + new_white + ' ' + sort_name
     if os.getcwd != output_path:
         os.chdir(output_path)
     os.system('cmd /C ' + cmd_text)
 
     # create Black file
-    new_black = 'Black_' + new_file
-    cmd_text = 'pgn-extract --quiet -t' + bl_tag_file + ' --output ' + new_black + ' ' + new_file
+    cmd_text = 'pgn-extract --quiet -t' + bl_tag_file + ' --output ' + new_black + ' ' + sort_name
     if os.getcwd != output_path:
         os.chdir(output_path)
     os.system('cmd /C ' + cmd_text)
-
+    
     # clean up
-    os.remove(os.path.join(output_path, tc_tag_file))
+    if tc_filter_option and tc_type in tc_options:
+        os.remove(os.path.join(output_path, updated_tc_name))
+        os.remove(os.path.join(output_path, tc_tag_file_min))
+        os.remove(os.path.join(output_path, tc_tag_file_max))
+        os.remove(os.path.join(output_path, tmp_file))
     os.remove(os.path.join(output_path, new_file))
     os.remove(os.path.join(output_path, wh_tag_file))
     os.remove(os.path.join(output_path, bl_tag_file))
