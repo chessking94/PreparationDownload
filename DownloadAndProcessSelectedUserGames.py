@@ -1,7 +1,6 @@
 import datetime as dt
 import pyodbc as sql
 import pandas as pd
-from urllib import request, error
 import requests
 import json
 import os
@@ -35,6 +34,7 @@ def lichessgames():
             dload_name = i[1] + '_' + dte_val + '.pgn'
             dload_file = os.path.join(dload_path, dload_name)
             hdr = {'Authorization': 'Bearer ' + token_value}
+            """ TODO Consider adding special handling for 429's """
             with requests.get(dload_url, headers=hdr, stream=True) as resp:
                 if resp.status_code != 200:
                     print('Unable to complete request! Request returned code ' + resp.status_code)
@@ -97,14 +97,14 @@ def chesscomgames():
         # get pgns
         for i in users:
             archive_url = 'https://api.chess.com/pub/player/' + i[1] + '/games/archives'
-            try:
-                json_data = request.urlopen(archive_url).read()
-                archive_list = json.loads(json_data)
-                chk = 1
-            except error.HTTPError.code as e:
-                err = e.getcode()
-                print(str(err) + ' error on ' + i[1])
-                chk = 0
+            with requests.get(archive_url) as resp:
+                if resp.status_code != 200:
+                    print('Unable to complete request! Request returned code ' + resp.status_code)
+                    chk = 0
+                else:
+                    json_data = resp.content
+                    archive_list = json.loads(json_data)
+                    chk = 1
             if chk == 1:
                 for url in archive_list['archives']:
                     dload_url = url + '/pgn'
@@ -114,15 +114,21 @@ def chesscomgames():
                     mm = url[-2:]
                     dload_name = i[1] + '_' + yyyy + mm + '.pgn'
                     dload_file = os.path.join(dload_path, dload_name)
-                    """ TODO Switch urlretrieve to requests.get as in lichess method"""
-                    request.urlretrieve(dload_url, dload_file)
-                    with open(dload_file, mode='r', encoding='utf-8', errors='ignore') as dl:
-                        lines = dl.read()
-                    txt_old = '"' + i[1] + '"'
-                    txt_new = '"' + i[0].replace('-', ', ') + '"'
-                    lines = re.sub(txt_old, txt_new, lines, flags=re.IGNORECASE)
-                    with open(dload_file, mode='w', encoding='utf-8', errors='ignore') as dl:
-                        dl.write(lines)
+                    """ TODO Consider adding special handling for 429's """
+                    with requests.get(dload_url, stream=True) as resp:
+                        if resp.status_code != 200:
+                            print('Unable to complete request! Request returned code ' + resp.status_code)
+                        else:
+                            with open(dload_file, 'wb') as f:
+                                for chunk in resp.iter_content(chunk_size=8196):
+                                    f.write(chunk)
+                            with open(dload_file, mode='r', encoding='utf-8', errors='ignore') as dl:
+                                lines = dl.read()
+                            txt_old = '"' + i[1] + '"'
+                            txt_new = '"' + i[0].replace('-', ', ') + '"'
+                            lines = re.sub(txt_old, txt_new, lines, flags=re.IGNORECASE)
+                            with open(dload_file, mode='w', encoding='utf-8', errors='ignore') as dl:
+                                dl.write(lines)
 
         # merge and clean pgns
         if rec_ct == 1:
@@ -299,12 +305,8 @@ def processfiles():
     sort_file = open(os.path.join(output_path, sort_name), 'w')
     idx_sort = [x for _, x in sorted(zip(game_date, idx))]
     for i in idx_sort:
-        """ TODO Review whether changes are needed to encoding; the below works to avoid funny business with non-ascii characters but converts to bytes
-            Perhaps not worth worrying about since pgn-extract converts file back to normal pgn and this file gets deleted anyway
-        """
         txt = str(game_text[i]).encode(encoding='utf-8', errors='replace')
         sort_file.write(str(txt) + '\n\n')
-        #sort_file.write(str(game_text[i]) + '\n\n') # might fail if funny character is present, but doesn't convert to bytes
     sort_file.close()  
     pgn.close()
 
