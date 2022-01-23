@@ -149,7 +149,7 @@ def chesscomgames():
         os.system('cmd /C ' + cmd_text)
 
         # remove any non-standard games remaining; Chess.com standard games omit the Variant tag
-        pgn = open(os.path.join(dload_path, clean_name), mode='r', encoding='utf-8', errors='ignore')
+        pgn = open(os.path.join(dload_path, clean_name), mode='r', encoding='utf-8', errors='replace')
         updated_clean_name = os.path.splitext(clean_name)[0] + '_NoVariant' + os.path.splitext(clean_name)[1]
         pgn_new = open(os.path.join(dload_path, updated_clean_name), 'w')
         gm_txt = chess.pgn.read_game(pgn)
@@ -159,8 +159,7 @@ def chesscomgames():
             except:
                 variant_tag = 'Standard'
             if variant_tag == 'Standard':
-                txt = str(gm_txt).encode(encoding='utf-8', errors='replace')
-                pgn_new.write(str(txt) + '\n\n')
+                pgn_new.write(str(gm_txt) + '\n\n')
             gm_txt = chess.pgn.read_game(pgn)
         pgn.close()
         pgn_new.close()
@@ -287,7 +286,7 @@ def processfiles():
         new_file = updated_tc_name
 
     # sort game file
-    pgn = open(os.path.join(output_path, new_file), mode='r', encoding='utf-8', errors='ignore')
+    pgn = open(os.path.join(output_path, new_file), mode='r', encoding='utf-8', errors='replace')
 
     idx = []
     game_date = []
@@ -305,7 +304,7 @@ def processfiles():
     sort_file = open(os.path.join(output_path, sort_name), 'w')
     idx_sort = [x for _, x in sorted(zip(game_date, idx))]
     for i in idx_sort:
-        txt = str(game_text[i]).encode(encoding='utf-8', errors='replace')
+        txt = str(game_text[i])
         sort_file.write(str(txt) + '\n\n')
     sort_file.close()  
     pgn.close()
