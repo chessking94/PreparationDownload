@@ -10,6 +10,9 @@ import shutil as sh
 import chess
 import chess.pgn
 
+# TODO: Consider adding command line arguments to specify user directly, rather than through Excel file
+# Also could consider parameters like games between/since certain dates, time controls, etc
+
 def lichessgames():
     dload_path = r'C:\Users\eehunt\Documents\Chess\Scripts\Lichess'
 
@@ -34,10 +37,9 @@ def lichessgames():
             dload_name = i[1] + '_' + dte_val + '.pgn'
             dload_file = os.path.join(dload_path, dload_name)
             hdr = {'Authorization': 'Bearer ' + token_value}
-            """ TODO Consider adding special handling for 429's """
             with requests.get(dload_url, headers=hdr, stream=True) as resp:
                 if resp.status_code != 200:
-                    print('Unable to complete request! Request returned code ' + resp.status_code)
+                    print('Unable to complete request! Request returned code ' + str(resp.status_code))
                 else:
                     with open(dload_file, 'wb') as f:
                         for chunk in resp.iter_content(chunk_size=8196):
@@ -92,6 +94,7 @@ def chesscomgames():
     users = pd.read_sql(qry_text, conn).values.tolist()
     rec_ct = len(users)
     conn.close()
+    #users = [['mohamad_kk7','mohamad_kk7']]
 
     if rec_ct > 0:
         # get pgns
@@ -114,7 +117,6 @@ def chesscomgames():
                     mm = url[-2:]
                     dload_name = i[1] + '_' + yyyy + mm + '.pgn'
                     dload_file = os.path.join(dload_path, dload_name)
-                    """ TODO Consider adding special handling for 429's """
                     with requests.get(dload_url, stream=True) as resp:
                         if resp.status_code != 200:
                             print('Unable to complete request! Request returned code ' + resp.status_code)
@@ -159,27 +161,34 @@ def chesscomgames():
             except:
                 variant_tag = 'Standard'
             if variant_tag == 'Standard':
-                pgn_new.write(str(gm_txt) + '\n\n')
+                #pgn_new.write(str(gm_txt) + '\n\n')
+                txt = str(gm_txt).encode(encoding='utf-8', errors='replace')
+                pgn_new.write(str(txt) + '\n\n')
             gm_txt = chess.pgn.read_game(pgn)
         pgn.close()
         pgn_new.close()
 
+        #""" should be irrelevant now that I am replacing errors when I open/sort above, instead of ignoring
         # need to rerun a dummy pgn-extract basically to reformat file from bytes to standard pgn
         updated_clean_name2 = os.path.splitext(updated_clean_name)[0] + 's' + os.path.splitext(updated_clean_name)[1]
         cmd_text = 'pgn-extract -C -N -V -D -pl2 --quiet --nosetuptags --output ' + updated_clean_name2 + ' ' + updated_clean_name
         if os.getcwd != dload_path:
             os.chdir(dload_path)
         os.system('cmd /C ' + cmd_text)
+        #"""
 
         # delete old files
         dir_files = [f for f in os.listdir(dload_path) if os.path.isfile(os.path.join(dload_path, f))]
         for filename in dir_files:
+            #if filename != updated_clean_name:
             if filename != updated_clean_name2:
                 fname_relpath = os.path.join(dload_path, filename)
                 os.remove(fname_relpath)
         
         # move to new folder
         output_path = r'C:\Users\eehunt\Documents\Chess\Scripts\output'
+        #old_loc = os.path.join(dload_path, updated_clean_name)
+        #new_loc = os.path.join(output_path, updated_clean_name)
         old_loc = os.path.join(dload_path, updated_clean_name2)
         new_loc = os.path.join(output_path, updated_clean_name2)
         os.rename(old_loc, new_loc)
@@ -304,7 +313,8 @@ def processfiles():
     sort_file = open(os.path.join(output_path, sort_name), 'w')
     idx_sort = [x for _, x in sorted(zip(game_date, idx))]
     for i in idx_sort:
-        txt = str(game_text[i])
+        #txt = str(game_text[i])
+        txt = str(game_text[i]).encode(encoding='utf-8', errors='replace') # need to serious review codec issues, Jordan Timm has some funky characters in his games
         sort_file.write(str(txt) + '\n\n')
     sort_file.close()  
     pgn.close()
