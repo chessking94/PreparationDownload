@@ -17,7 +17,7 @@ def lichessgames(name):
 
     conn = sql.connect('Driver={ODBC Driver 17 for SQL Server};Server=HUNT-PC1;Database=ChessAnalysis;Trusted_Connection=yes;')
     if len(name) == 1:
-        if name.upper() == 'CUSTOM': # backdoor to allow me to download custom datasets based on the original Excel selection process
+        if name[0].upper() == 'CUSTOM': # backdoor to allow me to download custom datasets based on the original Excel selection process
             qry_text = "SELECT ISNULL(LastName, '') + '-' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE Source = 'Lichess' AND DownloadFlag = 1"
         else:
             qry_text = "SELECT ISNULL(LastName, '') + '-' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE Source = 'Lichess' AND Username = '" + name[0] + "'"
@@ -26,7 +26,14 @@ def lichessgames(name):
     users = pd.read_sql(qry_text, conn).values.tolist()
     rec_ct = len(users)
     conn.close()
-    # TO DO: Add ability to accept a Lichess username that doesn't return any records in the SQL table
+
+    repl_nm = 1
+    if len(name) == 1 and name[0].upper() != 'CUSTOM' and rec_ct == 0: # username was passed, not in SQL table
+        yn = yn_prompt('A username was passed but not found in the SQL reference table. Force download and continue? Y or N ===> ')
+        if yn == 'Y':
+            users = [[name[0], name[0]]]
+            rec_ct = len(users)
+            repl_nm = 0
 
     if rec_ct > 0:
         # get auth token
@@ -52,11 +59,12 @@ def lichessgames(name):
                             f.write(chunk)
                     with open(dload_file, mode='r', encoding='utf-8', errors='ignore') as dl:
                         lines = dl.read()
-                    txt_old = '"' + i[1] + '"'
-                    txt_new = '"' + i[0].replace('-', ', ') + '"'
-                    lines = re.sub(txt_old, txt_new, lines, flags=re.IGNORECASE)
-                    with open(dload_file, mode='w', encoding='utf-8', errors='ignore') as dl:
-                        dl.write(lines)
+                    if repl_nm:
+                        txt_old = '"' + i[1] + '"'
+                        txt_new = '"' + i[0].replace('-', ', ') + '"'
+                        lines = re.sub(txt_old, txt_new, lines, flags=re.IGNORECASE)
+                        with open(dload_file, mode='w', encoding='utf-8', errors='ignore') as dl:
+                            dl.write(lines)
 
         # merge and clean pgns
         dte_val = dt.datetime.now().strftime('%Y%m%d%H%M%S')
@@ -98,7 +106,7 @@ def chesscomgames(name):
 
     conn = sql.connect('Driver={ODBC Driver 17 for SQL Server};Server=HUNT-PC1;Database=ChessAnalysis;Trusted_Connection=yes;')        
     if len(name) == 1:
-        if name.upper() == 'CUSTOM': # backdoor to allow me to download custom datasets based on the original Excel selection process
+        if name[0].upper() == 'CUSTOM': # backdoor to allow me to download custom datasets based on the original Excel selection process
             qry_text = "SELECT ISNULL(LastName, '') + '-' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE Source = 'Chess.com' AND DownloadFlag = 1"
         else:
             qry_text = "SELECT ISNULL(LastName, '') + '-' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE Source = 'Chess.com' AND Username = '" + name[0] + "'"
@@ -107,7 +115,14 @@ def chesscomgames(name):
     users = pd.read_sql(qry_text, conn).values.tolist()
     rec_ct = len(users)
     conn.close()
-    # TO DO: Add ability to accept a Chess.com username that doesn't return any records in the SQL table
+
+    repl_nm = 1
+    if len(name) == 1 and name[0].upper() != 'CUSTOM' and rec_ct == 0: # username was passed, not in SQL table
+        yn = yn_prompt('A username was passed but not found in the SQL reference table. Force download and continue? Y or N ===> ')
+        if yn == 'Y':
+            users = [[name[0], name[0]]]
+            rec_ct = len(users)
+            repl_nm = 0
 
     if rec_ct > 0:
         # get pgns
@@ -139,11 +154,12 @@ def chesscomgames(name):
                                     f.write(chunk)
                             with open(dload_file, mode='r', encoding='utf-8', errors='ignore') as dl:
                                 lines = dl.read()
-                            txt_old = '"' + i[1] + '"'
-                            txt_new = '"' + i[0].replace('-', ', ') + '"'
-                            lines = re.sub(txt_old, txt_new, lines, flags=re.IGNORECASE)
-                            with open(dload_file, mode='w', encoding='utf-8', errors='ignore') as dl:
-                                dl.write(lines)
+                            if repl_nm:
+                                txt_old = '"' + i[1] + '"'
+                                txt_new = '"' + i[0].replace('-', ', ') + '"'
+                                lines = re.sub(txt_old, txt_new, lines, flags=re.IGNORECASE)
+                                with open(dload_file, mode='w', encoding='utf-8', errors='ignore') as dl:
+                                    dl.write(lines)
 
         # merge and clean pgns
         if rec_ct == 1:
@@ -158,6 +174,7 @@ def chesscomgames(name):
             os.chdir(dload_path)
         os.system('cmd /C ' + cmd_text)
 
+        # seems like pgn-extract is still writing parsing errors to stdout, can I suppress? if so, would need to do it here, below, and in LIchess block
         cmd_text = 'pgn-extract -C -N -V -D -pl2 --quiet --nosetuptags --output ' + clean_name + ' ' + merge_name + ' >nul'
         if os.getcwd != dload_path:
             os.chdir(dload_path)
@@ -214,7 +231,7 @@ def processfiles(timecontrol):
     name_set = set()
     for f in file_list: # this allows to extract names/usernames that might have an "_" character in them
         s_idx = f.index('_') + 1
-        e_idx = f.index('_AllGames_')
+        e_idx = f.index('_AllGames_') # may need to revist this part, if a time control is specified if might not read this way
         nm = f[s_idx:e_idx]
         name_set.add(nm)
 
@@ -406,17 +423,17 @@ def validate_site(site):
             ret = site_val
     return ret
 
-def call_custom():
+def yn_prompt(prompt):
     yn = ''
     yn_val = ['Y', 'N']
     while yn not in yn_val:
-        yn = input('You are about to download a custom dataset. Continue? Y or N ===> ')
+        yn = input(prompt)
         yn = yn.upper()
         if yn not in yn_val:
             print('Invalid parameter passed, please try again!')
     if yn == 'N':
         print('Process terminated by user')
-        quit()
+    return yn
 
 def validate_timecontrol(tc):
     tc_array = ['Bullet', 'Blitz', 'Rapid', 'Classical', 'Correspondence']
@@ -476,7 +493,9 @@ def main():
     # check backdoor and validate username-only entry
     if len(player) == 1:
         if player[0] == 'CUSTOM':
-            call_custom()
+            yn = yn_prompt('You are about to download a custom dataset. Continue? Y or N ===> ')
+            if yn == 'N':
+                quit()
         else:
             if site is None:
                 raise RuntimeError('Player username ' + player[0] + ' was provided but no site specified')
