@@ -193,15 +193,12 @@ def chesscomgames(name):
         # delete old files
         dir_files = [f for f in os.listdir(dload_path) if os.path.isfile(os.path.join(dload_path, f))]
         for filename in dir_files:
-            #if filename != updated_clean_name:
             if filename != updated_clean_name2:
                 fname_relpath = os.path.join(dload_path, filename)
                 os.remove(fname_relpath)
         
         # move to new folder
         output_path = r'C:\Users\eehunt\Documents\Chess\Scripts\output'
-        #old_loc = os.path.join(dload_path, updated_clean_name)
-        #new_loc = os.path.join(output_path, updated_clean_name)
         old_loc = os.path.join(dload_path, updated_clean_name2)
         new_loc = os.path.join(output_path, updated_clean_name2)
         os.rename(old_loc, new_loc)
@@ -209,15 +206,13 @@ def chesscomgames(name):
     else:
         print('No Chess.com games to download')
 
-#def processfiles(startdate, enddate, timecontrol, color):
-def processfiles():
+def processfiles(timecontrol):
     dte = dt.datetime.now().strftime('%Y%m%d%H%M%S')
     output_path = r'C:\Users\eehunt\Documents\Chess\Scripts\output'
     file_list = [f for f in os.listdir(output_path) if os.path.isfile(os.path.join(output_path, f))]
     
     name_set = set()
-    for f in file_list:
-        # this allows to extract names/usernames that might have an "_" character in them
+    for f in file_list: # this allows to extract names/usernames that might have an "_" character in them
         s_idx = f.index('_') + 1
         e_idx = f.index('_AllGames_')
         nm = f[s_idx:e_idx]
@@ -264,14 +259,12 @@ def processfiles():
         wfile.write(line)
     wfile.close()
 
-    # option for filtering to certain time controls
-    tc_filter_option = False
-    tc_type = 'Blitz'
+    tc_type = timecontrol
     tc_options = ['Bullet', 'Blitz', 'Rapid', 'Classical', 'Correspondence']
     # range for each time control, in seconds; values taken after reviewing Chess.com and Lichess criteria
     tc_min_list = ['60', '180', '601', '1800', '86400']
     tc_max_list = ['179', '600', '1799', '86399', '1209600']
-    if tc_filter_option and tc_type in tc_options:
+    if tc_type in tc_options:
         i = 0
         for t in tc_options:
             if t == tc_type:
@@ -335,7 +328,7 @@ def processfiles():
     pgn.close()
 
     # create White file
-    if tc_filter_option and tc_type in tc_options:
+    if tc_type in tc_options:
         new_white = 'White_' + player_name.replace('-', '') + '_' + tc_type + '_' + dte + '.pgn'
         new_black = 'Black_' + player_name.replace('-', '') + '_' + tc_type + '_' + dte + '.pgn'
     else:
@@ -354,7 +347,7 @@ def processfiles():
     os.system('cmd /C ' + cmd_text)
     
     # clean up
-    if tc_filter_option and tc_type in tc_options:
+    if tc_type in tc_options:
         os.remove(os.path.join(output_path, updated_tc_name))
         os.remove(os.path.join(output_path, tc_tag_file_min))
         os.remove(os.path.join(output_path, tc_tag_file_max))
@@ -461,7 +454,7 @@ def main():
     parser.add_argument('-v', '--version', action='version', version='%(prog)s 1.0')
     parser.add_argument('-p', '--player', default = 'CUSTOM', help = 'Player name')
     parser.add_argument('-s', '--site', nargs = '?', help = 'Game website: Chess.com|Lichess')
-    #parser.add_argument('-t', '--timecontrol', nargs = '?', help = 'Time control: Bullet|Blitz|Rapid|Classical|Correspondence')
+    parser.add_argument('-t', '--timecontrol', nargs = '?', help = 'Time control: Bullet|Blitz|Rapid|Classical|Correspondence')
     #parser.add_argument('--startdate', nargs = '?', help = 'Start date')
     #parser.add_argument('--enddate', nargs = '?', help = 'End date')
     #parser.add_argument('-c', '--color', nargs = '?', help = 'Color: White|Black')
@@ -475,7 +468,7 @@ def main():
     config = vars(args)
     player = parse_name(config['player'])
     site = validate_site(config['site'])
-    #timecontrol = validate_timecontrol(config['timecontrol'])
+    timecontrol = validate_timecontrol(config['timecontrol'])
     #startdate = format_date(config['startdate'])
     #enddate = format_date(config['enddate'])
     #color = validate_timecontrol(config['color'])
@@ -497,8 +490,7 @@ def main():
     else:
         lichessgames(player)
         chesscomgames(player)
-    processfiles()
-    #processfiles(timecontrol, startdate, enddate, color) # the "right" way to do this would be to pass the dates to the download step, but would complicate the process
+    processfiles(timecontrol) # the "right" way to do this would be to pass the dates to the download step, but would complicate the process
 
 
 if __name__ == '__main__':
