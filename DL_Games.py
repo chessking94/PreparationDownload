@@ -209,7 +209,8 @@ def chesscomgames(name):
     else:
         print('No Chess.com games to download')
 
-def processfiles(startdate, enddate, timecontrol, color):
+#def processfiles(startdate, enddate, timecontrol, color):
+def processfiles():
     dte = dt.datetime.now().strftime('%Y%m%d%H%M%S')
     output_path = r'C:\Users\eehunt\Documents\Chess\Scripts\output'
     file_list = [f for f in os.listdir(output_path) if os.path.isfile(os.path.join(output_path, f))]
