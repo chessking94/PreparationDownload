@@ -11,9 +11,12 @@ import chess
 import chess.pgn
 import argparse
 import dateutil.parser as dtp
+import tkinter as tk
 
-def lichessgames(name):
-    dload_path = r'C:\Users\eehunt\Documents\Chess\Scripts\Lichess'
+def lichessgames(name, basepath):
+    dload_path = os.path.join(basepath, 'Lichess')
+    if not os.path.isdir(dload_path):
+        os.mkdir(dload_path)
 
     conn = sql.connect('Driver={ODBC Driver 17 for SQL Server};Server=HUNT-PC1;Database=ChessAnalysis;Trusted_Connection=yes;')
     if len(name) == 1:
@@ -92,7 +95,9 @@ def lichessgames(name):
                 os.remove(fname_relpath)
         
         # move to new folder
-        output_path = r'C:\Users\eehunt\Documents\Chess\Scripts\output'
+        output_path = os.path.join(basepath, 'output')
+        if not os.path.isdir(output_path):
+            os.mkdir(output_path)
         old_loc = os.path.join(dload_path, clean_name)
         new_loc = os.path.join(output_path, clean_name)
         os.rename(old_loc, new_loc)
@@ -100,8 +105,10 @@ def lichessgames(name):
     else:
         print('No Lichess games to download')
 
-def chesscomgames(name):
-    dload_path = r'C:\Users\eehunt\Documents\Chess\Scripts\ChessCom'
+def chesscomgames(name, basepath):
+    dload_path = os.path.join(basepath, 'ChessCom')
+    if not os.path.isdir(dload_path):
+        os.mkdir(dload_path)
     dte = dt.datetime.now().strftime('%Y%m%d%H%M%S')
 
     conn = sql.connect('Driver={ODBC Driver 17 for SQL Server};Server=HUNT-PC1;Database=ChessAnalysis;Trusted_Connection=yes;')        
@@ -214,7 +221,9 @@ def chesscomgames(name):
                 os.remove(fname_relpath)
         
         # move to new folder
-        output_path = r'C:\Users\eehunt\Documents\Chess\Scripts\output'
+        output_path = os.path.join(basepath, 'output')
+        if not os.path.isdir(output_path):
+            os.mkdir(output_path)
         old_loc = os.path.join(dload_path, updated_clean_name2)
         new_loc = os.path.join(output_path, updated_clean_name2)
         os.rename(old_loc, new_loc)
@@ -222,8 +231,8 @@ def chesscomgames(name):
     else:
         print('No Chess.com games to download')
 
-def processfiles(timecontrol, startdate, enddate):
-    output_path = r'C:\Users\eehunt\Documents\Chess\Scripts\output'
+def processfiles(basepath, timecontrol, startdate, enddate):
+    output_path = os.path.join(basepath, 'output')
     file_list = [f for f in os.listdir(output_path) if os.path.isfile(os.path.join(output_path, f))]
     
     name_set = set()
@@ -408,24 +417,23 @@ def processfiles(timecontrol, startdate, enddate):
 
     print('PGN processing complete, files located at ' + output_path)
 
-def archiveold():
-    output_path = r'C:\Users\eehunt\Documents\Chess\Scripts\output'
+def archiveold(outpath):
+    output_path = os.path.join(outpath, 'output')
     archive_path = os.path.join(output_path, 'archive')
 
-    if os.path.isdir(output_path):
-        file_list = [f for f in os.listdir(output_path) if os.path.isfile(os.path.join(output_path, f))]
-        if len(file_list) > 0:
-            if not os.path.isdir(archive_path):
-                os.mkdir(archive_path)
-            for file in file_list:
-                old_name = os.path.join(output_path, file)
-                new_name = os.path.join(archive_path, file)
-                sh.move(old_name, new_name)
-            
-            print('Old files archived to ' + archive_path)
-    else: # TODO - Add better error handling here
-        print('Output path does not exist!')
-        quit()
+    if not os.path.isdir(output_path):
+        os.mkdir(output_path)
+
+    file_list = [f for f in os.listdir(output_path) if os.path.isfile(os.path.join(output_path, f))]
+    if len(file_list) > 0:
+        if not os.path.isdir(archive_path):
+            os.mkdir(archive_path)
+        for file in file_list:
+            old_name = os.path.join(output_path, file)
+            new_name = os.path.join(archive_path, file)
+            sh.move(old_name, new_name)
+        
+        print('Old files archived to ' + archive_path)
 
 def parse_name(name): # return array ['Last', 'First']; otherwise ['name']
     parsed_name = []
@@ -485,30 +493,15 @@ def format_date(date_string):
         print('Unable to parse ' + date_string + ' as date, ignoring parameter')
     return dte
 
-def main():
-    # set up CLI parser
-    parser = argparse.ArgumentParser(description = 'Chess.com and Lichess Game Downloader', formatter_class = argparse.ArgumentDefaultsHelpFormatter, usage = argparse.SUPPRESS)
-    parser.add_argument('-v', '--version', action='version', version='%(prog)s 1.0')
-    parser.add_argument('-p', '--player', default = 'CUSTOM', help = 'Player name')
-    parser.add_argument('-s', '--site', nargs = '?', help = 'Game website: Chess.com, Lichess')
-    parser.add_argument('-t', '--timecontrol', nargs = '?', help = 'Time control: Bullet, Blitz, Rapid, Classical, Correspondence')
-    parser.add_argument('--startdate', nargs = '?', help = 'Start date')
-    parser.add_argument('--enddate', nargs = '?', help = 'End date')
-    """
-    Future Arguments:
-    game type (variants) - Would be nice to have support for variants, but that would take more thought and be useless for my purposes
-    finer details like ECO, minimum number of moves - might need some kind of pgn-extract loop thing for this, lower priority
-    specific output folder - Want to modularize as much as possible and construct all paths in script, rather than relying on existing paths
-    """
-    args = parser.parse_args()
-    config = vars(args)
-    player = parse_name(config['player'])
-    site = validate_site(config['site'])
-    timecontrol = validate_timecontrol(config['timecontrol'])
-    startdate = format_date(config['startdate'])
-    enddate = format_date(config['enddate'])
+def validate_path(path, def_path):
+    if not os.path.isdir(path):
+        print(path + ' does not exist, ignoring parameter')
+        ret = def_path
+    else:
+        ret = path
+    return ret
 
-    # check backdoor and validate username-only entry
+def check_backdoor(player, site):
     if len(player) == 1:
         if player[0] == 'CUSTOM':
             yn = yn_prompt('You are about to download a custom dataset. Continue? Y or N ===> ')
@@ -518,16 +511,80 @@ def main():
             if site is None:
                 raise RuntimeError('Player username ' + player[0] + ' was provided but no site specified')
 
+def cli():
+    # set up CLI parser
+    def_path = r'C:\Users\eehunt\Documents\Chess\Scripts'
+    vrs_num = '1.0'
+    parser = argparse.ArgumentParser(description = 'Chess.com and Lichess Game Downloader', formatter_class = argparse.ArgumentDefaultsHelpFormatter, usage = argparse.SUPPRESS)
+    parser.add_argument('-v', '--version', action='version', version='%(prog)s ' + vrs_num)
+    parser.add_argument('-p', '--player', default = 'CUSTOM', help = 'Player name')
+    parser.add_argument('-s', '--site', nargs = '?', help = 'Game website: Chess.com, Lichess')
+    parser.add_argument('-t', '--timecontrol', nargs = '?', help = 'Time control: Bullet, Blitz, Rapid, Classical, Correspondence')
+    parser.add_argument('--startdate', nargs = '?', help = 'Start date')
+    parser.add_argument('--enddate', nargs = '?', help = 'End date')
+    parser.add_argument('--outpath', default = def_path, help = 'Output path')
+    """
+    Future Arguments:
+    game type (variants) - Would be nice to have support for variants, but that would take more thought and be useless for my purposes
+    finer details like ECO, minimum number of moves - might need some kind of pgn-extract loop thing for this, lower priority
+    """
+    args = parser.parse_args()
+    config = vars(args)
+    player = parse_name(config['player'])
+    site = validate_site(config['site'])
+    timecontrol = validate_timecontrol(config['timecontrol'])
+    startdate = format_date(config['startdate'])
+    enddate = format_date(config['enddate'])
+    outpath = validate_path(config['outpath'], def_path)
+
+    # check backdoor and validate username-only entry
+    check_backdoor(player, site)
+
     # process request
-    archiveold()
+    archiveold(outpath)
     if site == 'Lichess':
-        lichessgames(player)
+        lichessgames(player, outpath)
     elif site == 'Chess.Com':
-        chesscomgames(player)
+        chesscomgames(player, outpath)
     else:
-        lichessgames(player)
-        chesscomgames(player)
-    processfiles(timecontrol, startdate, enddate) # the "right" way to do this would be to pass the dates to the download step, but would complicate the process
+        lichessgames(player, outpath)
+        chesscomgames(player, outpath)
+    processfiles(outpath, timecontrol, startdate, enddate) # the "right" way to do this would be to pass the dates to the download step, but would complicate the process
+
+def makeform(root, fields):
+    entries = []
+    for field in fields:
+        def_val = ''
+        row = tk.Frame(root)
+        lab = tk.Label(row, width = 30, text = field, anchor = 'w')
+        v = tk.StringVar(root, value = def_val)
+        ent = tk.Entry(row, textvariable = v)
+        row.pack(side=tk.TOP, fill = tk.X, padx = 5, pady = 5)
+        lab.pack(side=tk.LEFT)
+        ent.pack(side=tk.LEFT, expand = tk.YES, fill = tk.X)
+        entries.append((field, ent))  
+    return entries
+
+def gui_download(entries):
+    pass
+
+def gui():
+    root = tk.Tk()
+    root.title('Chess.com/Lichess Game Downloader')
+    root.geometry('500x250')
+    fields = ['Player/Username', 'Site', 'Time Control', 'Start Date', 'End Date']
+    ents = makeform(root, fields)
+    #root.bind('<Return>', (lambda event, e = ents: populate_values(e)))
+    b2 = tk.Button(root, text = 'Exit', command = root.destroy, bg = 'red')
+    b2.pack(side=tk.BOTTOM, padx = 0, pady = 5)
+    #b1 = tk.Button(root, text = 'Download', command = lambda:analyzepgn(val_flag[0]), bg = 'green', fg = 'white')
+    b1 = tk.Button(root, text = 'Download', command = lambda:gui_download(ents), bg = 'green', fg = 'white')
+    b1.pack(side=tk.BOTTOM, padx = 0, pady = 5)
+    root.mainloop()
+
+def main():
+    cli()
+    #gui()
 
 
 if __name__ == '__main__':
