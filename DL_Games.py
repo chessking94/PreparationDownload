@@ -13,6 +13,8 @@ import argparse
 import dateutil.parser as dtp
 import tkinter as tk
 
+NM_DELIM = '||'
+
 def lichessgames(name, basepath):
     dload_path = os.path.join(basepath, 'Lichess')
     if not os.path.isdir(dload_path):
@@ -21,11 +23,11 @@ def lichessgames(name, basepath):
     conn = sql.connect('Driver={ODBC Driver 17 for SQL Server};Server=HUNT-PC1;Database=ChessAnalysis;Trusted_Connection=yes;')
     if len(name) == 1:
         if name[0].upper() == 'CUSTOM': # backdoor to allow me to download custom datasets based on the original Excel selection process
-            qry_text = "SELECT ISNULL(LastName, '') + '-' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE Source = 'Lichess' AND DownloadFlag = 1"
+            qry_text = "SELECT ISNULL(LastName, '') + '" + NM_DELIM + "' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE Source = 'Lichess' AND DownloadFlag = 1"
         else:
-            qry_text = "SELECT ISNULL(LastName, '') + '-' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE Source = 'Lichess' AND Username = '" + name[0] + "'"
+            qry_text = "SELECT ISNULL(LastName, '') + '" + NM_DELIM + "' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE Source = 'Lichess' AND Username = '" + name[0] + "'"
     else:
-        qry_text = "SELECT ISNULL(LastName, '') + '-' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE Source = 'Lichess' AND LastName = '" + name[0] + "' AND FirstName = '" + name[1] + "'"
+        qry_text = "SELECT ISNULL(LastName, '') + '" + NM_DELIM + "' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE Source = 'Lichess' AND LastName = '" + name[0] + "' AND FirstName = '" + name[1] + "'"
     users = pd.read_sql(qry_text, conn).values.tolist()
     rec_ct = len(users)
     conn.close()
@@ -64,7 +66,7 @@ def lichessgames(name, basepath):
                         lines = dl.read()
                     if repl_nm:
                         txt_old = '"' + i[1] + '"'
-                        txt_new = '"' + i[0].replace('-', ', ') + '"'
+                        txt_new = '"' + i[0].replace(NM_DELIM, ', ') + '"'
                         lines = re.sub(txt_old, txt_new, lines, flags=re.IGNORECASE)
                         with open(dload_file, mode='w', encoding='utf-8', errors='ignore') as dl:
                             dl.write(lines)
@@ -114,11 +116,11 @@ def chesscomgames(name, basepath):
     conn = sql.connect('Driver={ODBC Driver 17 for SQL Server};Server=HUNT-PC1;Database=ChessAnalysis;Trusted_Connection=yes;')        
     if len(name) == 1:
         if name[0].upper() == 'CUSTOM': # backdoor to allow me to download custom datasets based on the original Excel selection process
-            qry_text = "SELECT ISNULL(LastName, '') + '-' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE Source = 'Chess.com' AND DownloadFlag = 1"
+            qry_text = "SELECT ISNULL(LastName, '') + '" + NM_DELIM + "' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE Source = 'Chess.com' AND DownloadFlag = 1"
         else:
-            qry_text = "SELECT ISNULL(LastName, '') + '-' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE Source = 'Chess.com' AND Username = '" + name[0] + "'"
+            qry_text = "SELECT ISNULL(LastName, '') + '" + NM_DELIM + "' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE Source = 'Chess.com' AND Username = '" + name[0] + "'"
     else:
-        qry_text = "SELECT ISNULL(LastName, '') + '-' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE Source = 'Chess.com' AND LastName = '" + name[0] + "' AND FirstName = '" + name[1] + "'"
+        qry_text = "SELECT ISNULL(LastName, '') + '" + NM_DELIM + "' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE Source = 'Chess.com' AND LastName = '" + name[0] + "' AND FirstName = '" + name[1] + "'"
     users = pd.read_sql(qry_text, conn).values.tolist()
     rec_ct = len(users)
     conn.close()
@@ -163,7 +165,7 @@ def chesscomgames(name, basepath):
                                 lines = dl.read()
                             if repl_nm:
                                 txt_old = '"' + i[1] + '"'
-                                txt_new = '"' + i[0].replace('-', ', ') + '"'
+                                txt_new = '"' + i[0].replace(NM_DELIM, ', ') + '"'
                                 lines = re.sub(txt_old, txt_new, lines, flags=re.IGNORECASE)
                                 with open(dload_file, mode='w', encoding='utf-8', errors='ignore') as dl:
                                     dl.write(lines)
@@ -244,7 +246,7 @@ def processfiles(basepath, timecontrol, startdate, enddate):
     player_name = list(name_set)[0]
 
     # combine or rename file(s) downloaded
-    merge_name = player_name.replace('-', '') + '_AllGames.pgn'
+    merge_name = player_name.replace(NM_DELIM, '') + '_AllGames.pgn'
     cmd_text = 'copy /B *.pgn ' + merge_name + ' >nul'
     if os.getcwd != output_path:
         os.chdir(output_path)
@@ -367,7 +369,7 @@ def processfiles(basepath, timecontrol, startdate, enddate):
     pgn.close()
    
     # set file names based on parameters set and split into White/Black files
-    base_name = player_name.replace('-', '')
+    base_name = player_name.replace(NM_DELIM, '')
     if timecontrol is not None:
         base_name = base_name + '_' + timecontrol
     else:
@@ -386,13 +388,13 @@ def processfiles(basepath, timecontrol, startdate, enddate):
 
     # create white/black tag files
     wh_tag_file = 'WhiteTag.txt'
-    cmd_text = 'echo White "' + player_name.replace('-', ', ') + '" >> ' + wh_tag_file
+    cmd_text = 'echo White "' + player_name.replace(NM_DELIM, ', ') + '" >> ' + wh_tag_file
     if os.getcwd != output_path:
         os.chdir(output_path)
     os.system('cmd /C ' + cmd_text)
 
     bl_tag_file = 'BlackTag.txt'
-    cmd_text = 'echo Black "' + player_name.replace('-', ', ') + '" >> ' + bl_tag_file
+    cmd_text = 'echo Black "' + player_name.replace(NM_DELIM, ', ') + '" >> ' + bl_tag_file
     if os.getcwd != output_path:
         os.chdir(output_path)
     os.system('cmd /C ' + cmd_text)
