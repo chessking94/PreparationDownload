@@ -1,17 +1,18 @@
+import argparse
 import datetime as dt
-import pyodbc as sql
-import pandas as pd
-import requests
+import fileinput
 import json
 import os
 import re
-import fileinput
 import shutil as sh
+import tkinter as tk
+
 import chess
 import chess.pgn
-import argparse
 import dateutil.parser as dtp
-import tkinter as tk
+import pandas as pd
+import pyodbc as sql
+import requests
 
 NM_DELIM = '||'
 
@@ -34,11 +35,10 @@ def lichessgames(name, basepath):
 
     repl_nm = 1
     if len(name) == 1 and name[0].upper() != 'CUSTOM' and rec_ct == 0: # username was passed, not in SQL table
-        yn = yn_prompt('A username was passed but not found in the SQL reference table. Force download and continue? Y or N ===> ')
-        if yn == 'Y':
-            users = [[name[0], name[0]]]
-            rec_ct = len(users)
-            repl_nm = 0
+        yn_prompt('A username was passed but not found in the SQL reference table. Force download and continue? Y or N ===> ')
+        users = [[name[0], name[0]]]
+        rec_ct = len(users)
+        repl_nm = 0
 
     if rec_ct > 0:
         # get auth token
@@ -127,11 +127,10 @@ def chesscomgames(name, basepath):
 
     repl_nm = 1
     if len(name) == 1 and name[0].upper() != 'CUSTOM' and rec_ct == 0: # username was passed, not in SQL table
-        yn = yn_prompt('A username was passed but not found in the SQL reference table. Force download and continue? Y or N ===> ')
-        if yn == 'Y':
-            users = [[name[0], name[0]]]
-            rec_ct = len(users)
-            repl_nm = 0
+        yn_prompt('A username was passed but not found in the SQL reference table. Force download and continue? Y or N ===> ')
+        users = [[name[0], name[0]]]
+        rec_ct = len(users)
+        repl_nm = 0
 
     if rec_ct > 0:
         # get pgns
@@ -233,7 +232,7 @@ def chesscomgames(name, basepath):
     else:
         print('No Chess.com games to download')
 
-def processfiles(basepath, timecontrol, startdate, enddate):
+def processfiles(basepath, timecontrol, startdate, enddate, color):
     output_path = os.path.join(basepath, 'output')
     file_list = [f for f in os.listdir(output_path) if os.path.isfile(os.path.join(output_path, f))]
     
@@ -385,6 +384,7 @@ def processfiles(basepath, timecontrol, startdate, enddate):
 
     new_white = base_name + '_White.pgn'
     new_black = base_name + '_Black.pgn'
+    new_combined = base_name + '_Combined.pgn'
 
     # create white/black tag files
     wh_tag_file = 'WhiteTag.txt'
@@ -399,21 +399,37 @@ def processfiles(basepath, timecontrol, startdate, enddate):
         os.chdir(output_path)
     os.system('cmd /C ' + cmd_text)
 
-    # split into white/black files
-    cmd_text = 'pgn-extract --quiet -t' + wh_tag_file + ' --output ' + new_white + ' ' + sort_name + ' >nul'
-    if os.getcwd != output_path:
-        os.chdir(output_path)
-    os.system('cmd /C ' + cmd_text)
+    # split into applicable color files
+    if color in ['White', 'Both']:
+        cmd_text = 'pgn-extract --quiet -t' + wh_tag_file + ' --output ' + new_white + ' ' + sort_name + ' >nul'
+        if os.getcwd != output_path:
+            os.chdir(output_path)
+        os.system('cmd /C ' + cmd_text)
 
-    cmd_text = 'pgn-extract --quiet -t' + bl_tag_file + ' --output ' + new_black + ' ' + sort_name + ' >nul'
-    if os.getcwd != output_path:
-        os.chdir(output_path)
-    os.system('cmd /C ' + cmd_text)
+    if color in ['Black', 'Both']:
+        cmd_text = 'pgn-extract --quiet -t' + bl_tag_file + ' --output ' + new_black + ' ' + sort_name + ' >nul'
+        if os.getcwd != output_path:
+            os.chdir(output_path)
+        os.system('cmd /C ' + cmd_text)
+    
+    # need to run a dummy pgn-extract on new_combined if being kept, it's formatted as bytes
+    if color == 'Combined':
+        cmd_text = 'pgn-extract --quiet --output ' + new_combined + ' ' + sort_name + ' >nul'
+        if os.getcwd != output_path:
+            os.chdir(output_path)
+        os.system('cmd /C ' + cmd_text)
     
     # clean up
+    files_to_keep = []
+    if color in ['White', 'Both']:
+        files_to_keep.append(new_white)
+    if color in ['Black', 'Both']:
+        files_to_keep.append(new_black)
+    if color == 'Combined':
+        files_to_keep.append(new_combined)
     dir_files = [f for f in os.listdir(output_path) if os.path.isfile(os.path.join(output_path, f))]
     for filename in dir_files:
-        if filename not in [new_white, new_black]:
+        if filename not in files_to_keep:
             fname_relpath = os.path.join(output_path, filename)
             os.remove(fname_relpath)
 
@@ -474,6 +490,7 @@ def yn_prompt(prompt):
             print('Invalid parameter passed, please try again!')
     if yn == 'N':
         print('Process terminated by user')
+        quit()
     return yn
 
 def validate_timecontrol(tc):
@@ -485,6 +502,17 @@ def validate_timecontrol(tc):
             print('Unable to validate ' + tc + ' to a time control, ignoring parameter')
         else:
             ret = tc_val
+    return ret
+
+def validate_color(color):
+    col_array = ['White', 'Black', 'Both', 'Combined']
+    ret = 'Both'
+    if color is not None:
+        col_val = color.title()
+        if col_val not in col_array:
+            print('Unable to validate ' + color + ' to a color, defaulting to Both')
+        else:
+            ret = col_val
     return ret
 
 def format_date(date_string):
@@ -506,9 +534,7 @@ def validate_path(path, def_path):
 def check_backdoor(player, site):
     if len(player) == 1:
         if player[0] == 'CUSTOM':
-            yn = yn_prompt('You are about to download a custom dataset. Continue? Y or N ===> ')
-            if yn == 'N':
-                quit()
+            yn_prompt('You are about to download a custom dataset. Continue? Y or N ===> ')
         else:
             if site is None:
                 raise RuntimeError('Player username ' + player[0] + ' was provided but no site specified')
@@ -522,6 +548,7 @@ def cli():
     parser.add_argument('-p', '--player', default = 'CUSTOM', help = 'Player name')
     parser.add_argument('-s', '--site', nargs = '?', help = 'Game website: Chess.com, Lichess')
     parser.add_argument('-t', '--timecontrol', nargs = '?', help = 'Time control: Bullet, Blitz, Rapid, Classical, Correspondence')
+    parser.add_argument('-c', '--color', nargs = '?', help = 'Color: White, Black, Both, Combined')
     parser.add_argument('--startdate', nargs = '?', help = 'Start date')
     parser.add_argument('--enddate', nargs = '?', help = 'End date')
     parser.add_argument('--outpath', default = def_path, help = 'Output path')
@@ -535,6 +562,7 @@ def cli():
     player = parse_name(config['player'])
     site = validate_site(config['site'])
     timecontrol = validate_timecontrol(config['timecontrol'])
+    color = validate_color(config['color'])
     startdate = format_date(config['startdate'])
     enddate = format_date(config['enddate'])
     outpath = validate_path(config['outpath'], def_path)
@@ -551,7 +579,7 @@ def cli():
     else:
         lichessgames(player, outpath)
         chesscomgames(player, outpath)
-    processfiles(outpath, timecontrol, startdate, enddate) # the "right" way to do this would be to pass the dates to the download step, but would complicate the process
+    processfiles(outpath, timecontrol, startdate, enddate, color) # the "right" way to do this would be to pass the dates to the download step, but would complicate the process
 
 def makeform(root, fields):
     entries = []
