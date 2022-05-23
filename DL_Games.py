@@ -5,7 +5,6 @@ import json
 import os
 import re
 import shutil as sh
-import tkinter as tk
 
 import chess
 import chess.pgn
@@ -14,106 +13,47 @@ import pandas as pd
 import pyodbc as sql
 import requests
 
-NM_DELIM = '||'
+NM_DELIM = '$$' # hard to find a good delimiter that might not be used in a username or is an escape character in Windows
 
-def lichessgames(name, basepath):
-    dload_path = os.path.join(basepath, 'Lichess')
-    if not os.path.isdir(dload_path):
-        os.mkdir(dload_path)
+def archive_old(outpath):
+    # move any files sitting in the output folder to an archive
+    output_path = os.path.join(outpath, 'output')
+    archive_path = os.path.join(output_path, 'archive')
 
-    conn = sql.connect('Driver={ODBC Driver 17 for SQL Server};Server=HUNT-PC1;Database=ChessAnalysis;Trusted_Connection=yes;')
-    if len(name) == 1:
-        if name[0].upper() == 'CUSTOM': # backdoor to allow me to download custom datasets based on the original Excel selection process
-            qry_text = "SELECT ISNULL(LastName, '') + '" + NM_DELIM + "' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE Source = 'Lichess' AND DownloadFlag = 1"
-        else:
-            qry_text = "SELECT ISNULL(LastName, '') + '" + NM_DELIM + "' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE Source = 'Lichess' AND Username = '" + name[0] + "'"
-    else:
-        qry_text = "SELECT ISNULL(LastName, '') + '" + NM_DELIM + "' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE Source = 'Lichess' AND LastName = '" + name[0] + "' AND FirstName = '" + name[1] + "'"
-    users = pd.read_sql(qry_text, conn).values.tolist()
-    rec_ct = len(users)
-    conn.close()
+    if not os.path.isdir(output_path):
+        os.mkdir(output_path)
 
-    repl_nm = 1
-    if len(name) == 1 and name[0].upper() != 'CUSTOM' and rec_ct == 0: # username was passed, not in SQL table
-        yn_prompt('A username was passed but not found in the SQL reference table. Force download and continue? Y or N ===> ')
-        users = [[name[0], name[0]]]
-        rec_ct = len(users)
-        repl_nm = 0
-
-    if rec_ct > 0:
-        # get auth token
-        fpath = r'C:\Users\eehunt\Repository'
-        fname = 'keys.json'
-        with open(os.path.join(fpath, fname), 'r') as f:
-            json_data = json.load(f)
-        token_value = json_data.get('LichessAPIToken')
-
-        # get pgns
-        for i in users:
-            dte_val = dt.datetime.now().strftime('%Y%m%d%H%M%S')
-            dload_url = 'https://lichess.org/api/games/user/' + i[1] + '?perfType=bullet,blitz,rapid,classical,correspondence&sort=dateAsc'
-            dload_name = i[1] + '_' + dte_val + '.pgn'
-            dload_file = os.path.join(dload_path, dload_name)
-            hdr = {'Authorization': 'Bearer ' + token_value}
-            with requests.get(dload_url, headers=hdr, stream=True) as resp:
-                if resp.status_code != 200:
-                    print('Unable to complete request! Request returned code ' + str(resp.status_code))
-                else:
-                    with open(dload_file, 'wb') as f:
-                        for chunk in resp.iter_content(chunk_size=8196):
-                            f.write(chunk)
-                    with open(dload_file, mode='r', encoding='utf-8', errors='ignore') as dl:
-                        lines = dl.read()
-                    if repl_nm:
-                        txt_old = '"' + i[1] + '"'
-                        txt_new = '"' + i[0].replace(NM_DELIM, ', ') + '"'
-                        lines = re.sub(txt_old, txt_new, lines, flags=re.IGNORECASE)
-                        with open(dload_file, mode='w', encoding='utf-8', errors='ignore') as dl:
-                            dl.write(lines)
-
-        # merge and clean pgns
-        dte_val = dt.datetime.now().strftime('%Y%m%d%H%M%S')
-        if rec_ct == 1:
-            merge_name = dload_name
-            clean_name = 'Lichess_' + users[0][0] + '_AllGames_' + dte_val + '.pgn'
-        else:
-            merge_name = 'Lichess_Multiple_Merged_' + dte_val + '.pgn'
-            clean_name = 'Lichess_Multiple_AllGames' + dte_val + '.pgn'
-            cmd_text = 'copy /B *.pgn ' + merge_name + ' >nul'
-            if os.getcwd != dload_path:
-                os.chdir(dload_path)
-            os.system('cmd /C ' + cmd_text)
-
-        cmd_text = 'pgn-extract -C -N -V -D -pl2 --quiet --nosetuptags --output ' + clean_name + ' ' + merge_name + ' >nul'
-        if os.getcwd != dload_path:
-            os.chdir(dload_path)
-        os.system('cmd /C ' + cmd_text)
-
-        # delete old files
-        dir_files = [f for f in os.listdir(dload_path) if os.path.isfile(os.path.join(dload_path, f))]
-        for filename in dir_files:
-            if filename != clean_name:
-                fname_relpath = os.path.join(dload_path, filename)
-                os.remove(fname_relpath)
+    file_list = [f for f in os.listdir(output_path) if os.path.isfile(os.path.join(output_path, f))]
+    if len(file_list) > 0:
+        if not os.path.isdir(archive_path):
+            os.mkdir(archive_path)
+        for file in file_list:
+            old_name = os.path.join(output_path, file)
+            new_name = os.path.join(archive_path, file)
+            sh.move(old_name, new_name)
         
-        # move to new folder
-        output_path = os.path.join(basepath, 'output')
-        if not os.path.isdir(output_path):
-            os.mkdir(output_path)
-        old_loc = os.path.join(dload_path, clean_name)
-        new_loc = os.path.join(output_path, clean_name)
-        os.rename(old_loc, new_loc)
-        print('Lichess game download complete')
-    else:
-        print('No Lichess games to download')
+        print('Old files archived to ' + archive_path)
 
-def chesscomgames(name, basepath):
+def check_backdoor(player, site):
+    # validate and verify if custom dataset is to be downloaded
+    if len(player) == 1:
+        if player[0] == 'CUSTOM':
+            yn = yn_prompt('You are about to download a custom dataset. Continue? Y or N ===> ')
+            if yn == 'N':
+                quit()
+        else:
+            if site is None:
+                raise RuntimeError('Player username ' + player[0] + ' was provided but no site specified')
+
+def chesscom_games(name, basepath):
+    # download Chess.com user games
     dload_path = os.path.join(basepath, 'ChessCom')
     if not os.path.isdir(dload_path):
         os.mkdir(dload_path)
     dte = dt.datetime.now().strftime('%Y%m%d%H%M%S')
 
-    conn = sql.connect('Driver={ODBC Driver 17 for SQL Server};Server=HUNT-PC1;Database=ChessAnalysis;Trusted_Connection=yes;')        
+    conn_str = get_connstr()
+    conn = sql.connect(conn_str)
     if len(name) == 1:
         if name[0].upper() == 'CUSTOM': # backdoor to allow me to download custom datasets based on the original Excel selection process
             qry_text = "SELECT ISNULL(LastName, '') + '" + NM_DELIM + "' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE Source = 'Chess.com' AND DownloadFlag = 1"
@@ -127,7 +67,9 @@ def chesscomgames(name, basepath):
 
     repl_nm = 1
     if len(name) == 1 and name[0].upper() != 'CUSTOM' and rec_ct == 0: # username was passed, not in SQL table
-        yn_prompt('A username was passed but not found in the SQL reference table. Force download and continue? Y or N ===> ')
+        yn = yn_prompt('A username was passed but not found in the SQL reference table. Force download and continue? Y or N ===> ')
+        if yn == 'N':
+            quit()
         users = [[name[0], name[0]]]
         rec_ct = len(users)
         repl_nm = 0
@@ -232,7 +174,136 @@ def chesscomgames(name, basepath):
     else:
         print('No Chess.com games to download')
 
-def processfiles(basepath, timecontrol, startdate, enddate, color):
+def format_date(date_string):
+    # format dates in the PGN standard yyyy.mm.dd format
+    try:
+        dte = dt.datetime.strftime(dtp.parse(date_string), '%Y.%m.%d') if date_string is not None else None
+    except:
+        dte = None
+        print('Unable to parse ' + date_string + ' as date, ignoring parameter')
+    return dte
+
+def get_connstr():
+    # get SQL Server connection string from private file
+    fpath = r'C:\Users\eehunt\Repository'
+    fname = 'confidential.json'
+    with open(os.path.join(fpath, fname), 'r') as t:
+        key_data = json.load(t)
+    conn_str = key_data.get('SqlServerConnectionStringTrusted')
+    return conn_str
+
+def get_lichesstoken():
+    # get Lichess API token from private file
+    fpath = r'C:\Users\eehunt\Repository'
+    fname = 'confidential.json'
+    with open(os.path.join(fpath, fname), 'r') as t:
+        key_data = json.load(t)
+    token_value = key_data.get('LichessAPIToken')
+    return token_value
+
+def get_timecontrollimits(timecontrol, limit):
+    # get minimum or maximum number of seconds to be referenced for a given time control
+    # ranges in seconds determined after reviewing Chess.com and Lichess criteria
+    tc_dict = {}
+    tc_dict['Bullet'] = {'Min': '60', 'Max': '179'}
+    tc_dict['Blitz'] = {'Min': '180', 'Max': '600'}
+    tc_dict['Rapid'] = {'Min': '601', 'Max': '1799'}
+    tc_dict['Classical'] = {'Min': '1800', 'Max': '86399'}
+    tc_dict['Correspondence'] = {'Min': '86400', 'Max': '1209600'}
+    return tc_dict[timecontrol].get(limit)
+
+def lichess_games(name, basepath):
+    # download Lichess user games
+    dload_path = os.path.join(basepath, 'Lichess')
+    if not os.path.isdir(dload_path):
+        os.mkdir(dload_path)
+
+    conn_str = get_connstr()
+    conn = sql.connect(conn_str)
+    if len(name) == 1:
+        if name[0].upper() == 'CUSTOM': # backdoor to allow me to download custom datasets based on the original Excel selection process
+            qry_text = "SELECT ISNULL(LastName, '') + '" + NM_DELIM + "' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE Source = 'Lichess' AND DownloadFlag = 1"
+        else:
+            qry_text = "SELECT ISNULL(LastName, '') + '" + NM_DELIM + "' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE Source = 'Lichess' AND Username = '" + name[0] + "'"
+    else:
+        qry_text = "SELECT ISNULL(LastName, '') + '" + NM_DELIM + "' + ISNULL(FirstName, '') AS PlayerName, Username FROM UsernameXRef WHERE Source = 'Lichess' AND LastName = '" + name[0] + "' AND FirstName = '" + name[1] + "'"
+    users = pd.read_sql(qry_text, conn).values.tolist()
+    rec_ct = len(users)
+    conn.close()
+
+    repl_nm = 1
+    if len(name) == 1 and name[0].upper() != 'CUSTOM' and rec_ct == 0: # username was passed, not in SQL table
+        yn = yn_prompt('A username was passed but not found in the SQL reference table. Force download and continue? Y or N ===> ')
+        if yn == 'N':
+            quit()
+        users = [[name[0], name[0]]]
+        rec_ct = len(users)
+        repl_nm = 0
+
+    if rec_ct > 0:
+        token_value = get_lichesstoken()
+
+        # get pgns
+        for i in users:
+            dte_val = dt.datetime.now().strftime('%Y%m%d%H%M%S')
+            dload_url = 'https://lichess.org/api/games/user/' + i[1] + '?perfType=bullet,blitz,rapid,classical,correspondence&sort=dateAsc'
+            dload_name = i[1] + '_' + dte_val + '.pgn'
+            dload_file = os.path.join(dload_path, dload_name)
+            hdr = {'Authorization': 'Bearer ' + token_value}
+            with requests.get(dload_url, headers=hdr, stream=True) as resp:
+                if resp.status_code != 200:
+                    print('Unable to complete request! Request returned code ' + str(resp.status_code))
+                else:
+                    with open(dload_file, 'wb') as f:
+                        for chunk in resp.iter_content(chunk_size=8196):
+                            f.write(chunk)
+                    with open(dload_file, mode='r', encoding='utf-8', errors='ignore') as dl:
+                        lines = dl.read()
+                    if repl_nm:
+                        txt_old = '"' + i[1] + '"'
+                        txt_new = '"' + i[0].replace(NM_DELIM, ', ') + '"'
+                        lines = re.sub(txt_old, txt_new, lines, flags=re.IGNORECASE)
+                        with open(dload_file, mode='w', encoding='utf-8', errors='ignore') as dl:
+                            dl.write(lines)
+
+        # merge and clean pgns
+        dte_val = dt.datetime.now().strftime('%Y%m%d%H%M%S')
+        if rec_ct == 1:
+            merge_name = dload_name
+            clean_name = 'Lichess_' + users[0][0] + '_AllGames_' + dte_val + '.pgn'
+        else:
+            merge_name = 'Lichess_Multiple_Merged_' + dte_val + '.pgn'
+            clean_name = 'Lichess_Multiple_AllGames' + dte_val + '.pgn'
+            cmd_text = 'copy /B *.pgn ' + merge_name + ' >nul'
+            if os.getcwd != dload_path:
+                os.chdir(dload_path)
+            os.system('cmd /C ' + cmd_text)
+
+        cmd_text = 'pgn-extract -C -N -V -D -pl2 --quiet --nosetuptags --output ' + clean_name + ' ' + merge_name + ' >nul'
+        if os.getcwd != dload_path:
+            os.chdir(dload_path)
+        os.system('cmd /C ' + cmd_text)
+
+        # delete old files
+        dir_files = [f for f in os.listdir(dload_path) if os.path.isfile(os.path.join(dload_path, f))]
+        for filename in dir_files:
+            if filename != clean_name:
+                fname_relpath = os.path.join(dload_path, filename)
+                os.remove(fname_relpath)
+        
+        # move to new folder
+        output_path = os.path.join(basepath, 'output')
+        if not os.path.isdir(output_path):
+            os.mkdir(output_path)
+        old_loc = os.path.join(dload_path, clean_name)
+        new_loc = os.path.join(output_path, clean_name)
+        os.rename(old_loc, new_loc)
+        print('Lichess game download complete')
+    else:
+        print('No Lichess games to download')
+
+def process_games(basepath, timecontrol, startdate, enddate, color):
+    # process downloaded games per specifications
     output_path = os.path.join(basepath, 'output')
     file_list = [f for f in os.listdir(output_path) if os.path.isfile(os.path.join(output_path, f))]
     
@@ -264,18 +335,10 @@ def processfiles(basepath, timecontrol, startdate, enddate, color):
         wfile.write(line)
     wfile.close()
 
-    # time control extract; ranges in seconds determined after reviewing Chess.com and Lichess criteria
-    tc_options = ['Bullet', 'Blitz', 'Rapid', 'Classical', 'Correspondence']
-    tc_min_list = ['60', '180', '601', '1800', '86400']
-    tc_max_list = ['179', '600', '1799', '86399', '1209600']
+    # time control extract
     if timecontrol is not None:
-        i = 0
-        for t in tc_options:
-            if t == timecontrol:
-                break # exit loop; i will be the index needed
-            i = i + 1
-        tc_min = tc_min_list[i]
-        tc_max = tc_max_list[i]
+        tc_min = get_timecontrollimits(timecontrol, 'Min')
+        tc_max = get_timecontrollimits(timecontrol, 'Max')
 
         # create time control tag files
         tc_tag_file_min = 'TimeControlTagMin.txt'
@@ -400,13 +463,13 @@ def processfiles(basepath, timecontrol, startdate, enddate, color):
     os.system('cmd /C ' + cmd_text)
 
     # split into applicable color files
-    if color in ['White', 'Both']:
+    if color in ['White', None]:
         cmd_text = 'pgn-extract --quiet -t' + wh_tag_file + ' --output ' + new_white + ' ' + sort_name + ' >nul'
         if os.getcwd != output_path:
             os.chdir(output_path)
         os.system('cmd /C ' + cmd_text)
 
-    if color in ['Black', 'Both']:
+    if color in ['Black', None]:
         cmd_text = 'pgn-extract --quiet -t' + bl_tag_file + ' --output ' + new_black + ' ' + sort_name + ' >nul'
         if os.getcwd != output_path:
             os.chdir(output_path)
@@ -421,9 +484,9 @@ def processfiles(basepath, timecontrol, startdate, enddate, color):
     
     # clean up
     files_to_keep = []
-    if color in ['White', 'Both']:
+    if color in ['White', None]:
         files_to_keep.append(new_white)
-    if color in ['Black', 'Both']:
+    if color in ['Black', None]:
         files_to_keep.append(new_black)
     if color == 'Combined':
         files_to_keep.append(new_combined)
@@ -435,25 +498,8 @@ def processfiles(basepath, timecontrol, startdate, enddate, color):
 
     print('PGN processing complete, files located at ' + output_path)
 
-def archiveold(outpath):
-    output_path = os.path.join(outpath, 'output')
-    archive_path = os.path.join(output_path, 'archive')
-
-    if not os.path.isdir(output_path):
-        os.mkdir(output_path)
-
-    file_list = [f for f in os.listdir(output_path) if os.path.isfile(os.path.join(output_path, f))]
-    if len(file_list) > 0:
-        if not os.path.isdir(archive_path):
-            os.mkdir(archive_path)
-        for file in file_list:
-            old_name = os.path.join(output_path, file)
-            new_name = os.path.join(archive_path, file)
-            sh.move(old_name, new_name)
-        
-        print('Old files archived to ' + archive_path)
-
-def parse_name(name): # return array ['Last', 'First']; otherwise ['name']
+def parse_name(name):
+    # return array ['Last', 'First']; otherwise ['name']
     parsed_name = []
     if ',' in name:
         name = re.sub('\,\,+', ',', name) # remove double commas
@@ -468,19 +514,18 @@ def parse_name(name): # return array ['Last', 'First']; otherwise ['name']
         parsed_name.append(name)
         return parsed_name
 
-def validate_site(site):
-    site_array = ['Chess.Com', 'Lichess']
-    ret = None
-    if site is not None:
-        site_val = site.title()
-        if site_val not in site_array:
-            ret = None
-            print('Unable to validate ' + site + ' to a site, ignoring parameter')
-        else:
-            ret = site_val
+def validate_path(path, def_path):
+    # verifiy path exists for game output
+    if not os.path.isdir(path):
+        # TODO: Add ability to create new path; ask for confirmation before doing so
+        print(path + ' does not exist, ignoring parameter')
+        ret = def_path
+    else:
+        ret = path
     return ret
 
 def yn_prompt(prompt):
+    # general Yes/No prompt
     yn = ''
     yn_val = ['Y', 'N']
     while yn not in yn_val:
@@ -490,68 +535,63 @@ def yn_prompt(prompt):
             print('Invalid parameter passed, please try again!')
     if yn == 'N':
         print('Process terminated by user')
-        quit()
     return yn
 
-def validate_timecontrol(tc):
-    tc_array = ['Bullet', 'Blitz', 'Rapid', 'Classical', 'Correspondence']
-    ret = None
-    if tc is not None:
-        tc_val = tc.title()
-        if tc_val not in tc_array:
-            print('Unable to validate ' + tc + ' to a time control, ignoring parameter')
-        else:
-            ret = tc_val
-    return ret
-
-def validate_color(color):
-    col_array = ['White', 'Black', 'Both', 'Combined']
-    ret = 'Both'
-    if color is not None:
-        col_val = color.title()
-        if col_val not in col_array:
-            print('Unable to validate ' + color + ' to a color, defaulting to Both')
-        else:
-            ret = col_val
-    return ret
-
-def format_date(date_string):
-    try:
-        dte = dt.datetime.strftime(dtp.parse(date_string), '%Y.%m.%d') if date_string is not None else None
-    except:
-        dte = None
-        print('Unable to parse ' + date_string + ' as date, ignoring parameter')
-    return dte
-
-def validate_path(path, def_path):
-    if not os.path.isdir(path):
-        print(path + ' does not exist, ignoring parameter')
-        ret = def_path
-    else:
-        ret = path
-    return ret
-
-def check_backdoor(player, site):
-    if len(player) == 1:
-        if player[0] == 'CUSTOM':
-            yn_prompt('You are about to download a custom dataset. Continue? Y or N ===> ')
-        else:
-            if site is None:
-                raise RuntimeError('Player username ' + player[0] + ' was provided but no site specified')
-
-def cli():
+def main():
     # set up CLI parser
     def_path = r'C:\Users\eehunt\Documents\Chess\Scripts'
-    vrs_num = '1.0'
-    parser = argparse.ArgumentParser(description = 'Chess.com and Lichess Game Downloader', formatter_class = argparse.ArgumentDefaultsHelpFormatter, usage = argparse.SUPPRESS)
-    parser.add_argument('-v', '--version', action='version', version='%(prog)s ' + vrs_num)
-    parser.add_argument('-p', '--player', default = 'CUSTOM', help = 'Player name')
-    parser.add_argument('-s', '--site', nargs = '?', help = 'Game website: Chess.com, Lichess')
-    parser.add_argument('-t', '--timecontrol', nargs = '?', help = 'Time control: Bullet, Blitz, Rapid, Classical, Correspondence')
-    parser.add_argument('-c', '--color', nargs = '?', help = 'Color: White, Black, Both, Combined')
-    parser.add_argument('--startdate', nargs = '?', help = 'Start date')
-    parser.add_argument('--enddate', nargs = '?', help = 'End date')
-    parser.add_argument('--outpath', default = def_path, help = 'Output path')
+    vrs_num = '1.7'
+    parser = argparse.ArgumentParser(
+        description = 'Chess.com and Lichess Game Downloader',
+        formatter_class = argparse.ArgumentDefaultsHelpFormatter,
+        usage = argparse.SUPPRESS
+    )
+    parser.add_argument(
+        '-v', '--version',
+        action = 'version',
+        version = '%(prog)s ' + vrs_num
+    )
+    parser.add_argument(
+        '-p', '--player',
+        default = 'CUSTOM',
+        help = 'Player name'
+    )
+    parser.add_argument(
+        '-s', '--site',
+        default = None,
+        nargs = '?',
+        choices = ['Chess.com', 'Lichess'],
+        help = 'Website to download games from'
+    )
+    parser.add_argument(
+        '-t', '--timecontrol',
+        default = None,
+        nargs = '?',
+        choices = ['Bullet', 'Blitz', 'Rapid', 'Classical', 'Correspondence'],
+        help = 'Time control of games to download'
+    )
+    parser.add_argument(
+        '-c', '--color',
+        default = None,
+        nargs = '?',
+        choices = ['White', 'Black', 'Combined'],
+        help = 'Color of player games'
+    )
+    parser.add_argument(
+        '--startdate',
+        nargs = '?',
+        help = 'Do not include games before this date'
+    )
+    parser.add_argument(
+        '--enddate',
+        nargs = '?',
+        help = 'Do not include games after this date'
+    )
+    parser.add_argument(
+        '--outpath',
+        default = def_path,
+        help = 'Root path to output files to'
+    )
     """
     Future Arguments:
     game type (variants) - Would be nice to have support for variants, but that would take more thought and be useless for my purposes
@@ -560,9 +600,9 @@ def cli():
     args = parser.parse_args()
     config = vars(args)
     player = parse_name(config['player'])
-    site = validate_site(config['site'])
-    timecontrol = validate_timecontrol(config['timecontrol'])
-    color = validate_color(config['color'])
+    site = config['site']
+    timecontrol = config['timecontrol']
+    color = config['color']
     startdate = format_date(config['startdate'])
     enddate = format_date(config['enddate'])
     outpath = validate_path(config['outpath'], def_path)
@@ -571,50 +611,12 @@ def cli():
     check_backdoor(player, site)
 
     # process request
-    archiveold(outpath)
-    if site == 'Lichess':
-        lichessgames(player, outpath)
-    elif site == 'Chess.Com':
-        chesscomgames(player, outpath)
-    else:
-        lichessgames(player, outpath)
-        chesscomgames(player, outpath)
-    processfiles(outpath, timecontrol, startdate, enddate, color) # the "right" way to do this would be to pass the dates to the download step, but would complicate the process
-
-def makeform(root, fields):
-    entries = []
-    for field in fields:
-        def_val = ''
-        row = tk.Frame(root)
-        lab = tk.Label(row, width = 30, text = field, anchor = 'w')
-        v = tk.StringVar(root, value = def_val)
-        ent = tk.Entry(row, textvariable = v)
-        row.pack(side=tk.TOP, fill = tk.X, padx = 5, pady = 5)
-        lab.pack(side=tk.LEFT)
-        ent.pack(side=tk.LEFT, expand = tk.YES, fill = tk.X)
-        entries.append((field, ent))  
-    return entries
-
-def gui_download(entries):
-    pass
-
-def gui():
-    root = tk.Tk()
-    root.title('Chess.com/Lichess Game Downloader')
-    root.geometry('500x250')
-    fields = ['Player/Username', 'Site', 'Time Control', 'Start Date', 'End Date']
-    ents = makeform(root, fields)
-    #root.bind('<Return>', (lambda event, e = ents: populate_values(e)))
-    b2 = tk.Button(root, text = 'Exit', command = root.destroy, bg = 'red')
-    b2.pack(side=tk.BOTTOM, padx = 0, pady = 5)
-    #b1 = tk.Button(root, text = 'Download', command = lambda:analyzepgn(val_flag[0]), bg = 'green', fg = 'white')
-    b1 = tk.Button(root, text = 'Download', command = lambda:gui_download(ents), bg = 'green', fg = 'white')
-    b1.pack(side=tk.BOTTOM, padx = 0, pady = 5)
-    root.mainloop()
-
-def main():
-    cli()
-    #gui()
+    archive_old(outpath)
+    if site in ['Lichess', None]:
+        lichess_games(player, outpath)
+    if site in ['Chess.com', None]:
+        chesscom_games(player, outpath)
+    process_games(outpath, timecontrol, startdate, enddate, color)
 
 
 if __name__ == '__main__':
