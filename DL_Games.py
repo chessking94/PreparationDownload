@@ -20,19 +20,17 @@ def archive_old(outpath):
     output_path = os.path.join(outpath, 'output')
     archive_path = os.path.join(output_path, 'archive')
 
-    if not os.path.isdir(output_path):
-        os.mkdir(output_path)
-
-    file_list = [f for f in os.listdir(output_path) if os.path.isfile(os.path.join(output_path, f))]
-    if len(file_list) > 0:
-        if not os.path.isdir(archive_path):
-            os.mkdir(archive_path)
-        for file in file_list:
-            old_name = os.path.join(output_path, file)
-            new_name = os.path.join(archive_path, file)
-            sh.move(old_name, new_name)
-        
-        print('Old files archived to ' + archive_path)
+    if os.path.isdir(output_path):
+        file_list = [f for f in os.listdir(output_path) if os.path.isfile(os.path.join(output_path, f))]
+        if len(file_list) > 0:
+            if not os.path.isdir(archive_path):
+                os.mkdir(archive_path)
+            for file in file_list:
+                old_name = os.path.join(output_path, file)
+                new_name = os.path.join(archive_path, file)
+                sh.move(old_name, new_name)
+            
+            print('Old files archived to ' + archive_path)
 
 def check_backdoor(player, site):
     # validate and verify if custom dataset is to be downloaded
@@ -40,6 +38,7 @@ def check_backdoor(player, site):
         if player[0] == 'CUSTOM':
             yn = yn_prompt('You are about to download a custom dataset. Continue? Y or N ===> ')
             if yn == 'N':
+                print('Process terminated by user!')
                 quit()
         else:
             if site is None:
@@ -69,6 +68,7 @@ def chesscom_games(name, basepath):
     if len(name) == 1 and name[0].upper() != 'CUSTOM' and rec_ct == 0: # username was passed, not in SQL table
         yn = yn_prompt('A username was passed but not found in the SQL reference table. Force download and continue? Y or N ===> ')
         if yn == 'N':
+            print('Process terminated by user!')
             quit()
         users = [[name[0], name[0]]]
         rec_ct = len(users)
@@ -235,6 +235,7 @@ def lichess_games(name, basepath):
     if len(name) == 1 and name[0].upper() != 'CUSTOM' and rec_ct == 0: # username was passed, not in SQL table
         yn = yn_prompt('A username was passed but not found in the SQL reference table. Force download and continue? Y or N ===> ')
         if yn == 'N':
+            print('Process terminated by user!')
             quit()
         users = [[name[0], name[0]]]
         rec_ct = len(users)
@@ -516,12 +517,13 @@ def parse_name(name):
 
 def validate_path(path, def_path):
     # verifiy path exists for game output
+    ret = path
     if not os.path.isdir(path):
-        # TODO: Add ability to create new path; ask for confirmation before doing so
-        print(path + ' does not exist, ignoring parameter')
-        ret = def_path
-    else:
-        ret = path
+        yn = yn_prompt('Do you want to create the new path ' + path + ' ? Y or N ===> ')
+        if yn == 'Y':
+            os.mkdir(path)
+        else:
+            ret = def_path
     return ret
 
 def yn_prompt(prompt):
@@ -533,14 +535,12 @@ def yn_prompt(prompt):
         yn = yn.upper()
         if yn not in yn_val:
             print('Invalid parameter passed, please try again!')
-    if yn == 'N':
-        print('Process terminated by user')
     return yn
 
 def main():
     # set up CLI parser
     def_path = r'C:\Users\eehunt\Documents\Chess\Scripts'
-    vrs_num = '1.7'
+    vrs_num = '1.8'
     parser = argparse.ArgumentParser(
         description = 'Chess.com and Lichess Game Downloader',
         formatter_class = argparse.ArgumentDefaultsHelpFormatter,
