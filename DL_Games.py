@@ -450,6 +450,14 @@ def process_games(basepath, timecontrol, startdate, enddate, color):
     new_black = base_name + '_Black.pgn'
     new_combined = base_name + '_Combined.pgn'
 
+    # count games in sort_name for return value
+    game_ct = 0
+    search_text = '[Event "'
+    with open(os.path.join(output_path, sort_name), 'r') as f:
+        for line in f:
+            if search_text in line:
+                game_ct = game_ct + 1
+
     # create white/black tag files
     wh_tag_file = 'WhiteTag.txt'
     cmd_text = 'echo White "' + player_name.replace(NM_DELIM, ', ') + '" >> ' + wh_tag_file
@@ -499,6 +507,8 @@ def process_games(basepath, timecontrol, startdate, enddate, color):
 
     print('PGN processing complete, files located at ' + output_path)
 
+    return game_ct
+
 def parse_name(name):
     # return array ['Last', 'First']; otherwise ['name']
     parsed_name = []
@@ -536,6 +546,36 @@ def yn_prompt(prompt):
         if yn not in yn_val:
             print('Invalid parameter passed, please try again!')
     return yn
+
+def write_log(wr_type, player, site, timecontrol, color, startdate, enddate, outpath, dl_time, game_ct):
+    conn_str = get_connstr()
+    conn = sql.connect(conn_str)
+
+    # possible null handling
+    player = f"'{player}'"
+    site = 'NULL' if site is None else f"'{site}'"
+    timecontrol = 'NULL' if timecontrol is None else f"'{timecontrol}'"
+    color = 'NULL' if color is None else f"'{color}'"
+    startdate = 'NULL' if startdate is None else f"'{startdate}'"
+    enddate = 'NULL' if enddate is None else f"'{enddate}'"
+    outpath = 'NULL' if outpath is None else f"'{outpath}'"
+
+    csr = conn.cursor()
+    sql_cmd = ''
+    if wr_type == 'New':
+        sql_cmd = 'INSERT INTO DownloadLog (Player, Site, TimeControl, Color, StartDate, EndDate, OutPath) VALUES '
+        sql_cmd = sql_cmd + f"({player}, {site}, {timecontrol}, {color}, {startdate}, {enddate}, {outpath})"
+    elif wr_type == 'Update':
+        qry_text = 'SELECT MAX(DownloadID) FROM DownloadLog'
+        qry_rec = pd.read_sql(qry_text, conn).values.tolist()
+        curr_id = int(qry_rec[0][0])
+
+        sql_cmd = f"UPDATE DownloadLog SET DownloadStatus = 'Complete', DownloadSeconds = {dl_time}, DownloadGames = {game_ct} WHERE DownloadID = {curr_id}"
+
+    if sql_cmd != '':
+        csr.execute(sql_cmd)
+        conn.commit()
+    conn.close()
 
 def main():
     # set up CLI parser
@@ -610,13 +650,22 @@ def main():
     # check backdoor and validate username-only entry
     check_backdoor(player, site)
 
+    # create DownloadLog record
+    write_log('New', ', '.join(player), site, timecontrol, color, startdate, enddate, outpath, None, None)
+    proc_start = dt.datetime.now()
+
     # process request
     archive_old(outpath)
     if site in ['Lichess', None]:
         lichess_games(player, outpath)
     if site in ['Chess.com', None]:
         chesscom_games(player, outpath)
-    process_games(outpath, timecontrol, startdate, enddate, color)
+    game_ct = process_games(outpath, timecontrol, startdate, enddate, color)
+
+    # update DownloadLog record
+    proc_end = dt.datetime.now()
+    dl_time = (proc_end - proc_start).seconds
+    write_log('Update', None, None, None, None, None, None, None, dl_time, game_ct)
 
 
 if __name__ == '__main__':
