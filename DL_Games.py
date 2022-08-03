@@ -125,7 +125,7 @@ def chesscom_games(name, basepath):
         os.system('cmd /C ' + cmd_text)
 
         # seems like pgn-extract is still writing parsing errors to stdout, can I suppress? if so, would need to do it here, below, and in LIchess block
-        cmd_text = 'pgn-extract -C -N -V -D -pl2 --quiet --nosetuptags --output ' + clean_name + ' ' + merge_name + ' >nul'
+        cmd_text = 'pgn-extract -N -V -D -pl2 --quiet --nosetuptags --output ' + clean_name + ' ' + merge_name + ' >nul'
         if os.getcwd != dload_path:
             os.chdir(dload_path)
         os.system('cmd /C ' + cmd_text)
@@ -133,7 +133,7 @@ def chesscom_games(name, basepath):
         # remove any non-standard games remaining; Chess.com standard games omit the Variant tag
         pgn = open(os.path.join(dload_path, clean_name), mode='r', encoding='utf-8', errors='replace')
         updated_clean_name = os.path.splitext(clean_name)[0] + '_NoVariant' + os.path.splitext(clean_name)[1]
-        pgn_new = open(os.path.join(dload_path, updated_clean_name), 'w')
+        pgn_new = open(os.path.join(dload_path, updated_clean_name), 'w', encoding = 'utf-8')
         gm_txt = chess.pgn.read_game(pgn)
         while gm_txt is not None:
             try:
@@ -141,25 +141,15 @@ def chesscom_games(name, basepath):
             except:
                 variant_tag = 'Standard'
             if variant_tag == 'Standard':
-                txt = str(gm_txt).encode(encoding='utf-8', errors='replace')
-                pgn_new.write(str(txt) + '\n\n')
+                pgn_new.write(str(gm_txt) + '\n\n')
             gm_txt = chess.pgn.read_game(pgn)
         pgn.close()
         pgn_new.close()
 
-        #""" should be irrelevant now that I am replacing errors when I open/sort above, instead of ignoring
-        # need to rerun a dummy pgn-extract basically to reformat file from bytes to standard pgn
-        updated_clean_name2 = os.path.splitext(updated_clean_name)[0] + 's' + os.path.splitext(updated_clean_name)[1]
-        cmd_text = 'pgn-extract -C -N -V -D -pl2 --quiet --nosetuptags --output ' + updated_clean_name2 + ' ' + updated_clean_name + ' >nul'
-        if os.getcwd != dload_path:
-            os.chdir(dload_path)
-        os.system('cmd /C ' + cmd_text)
-        #"""
-
-        # delete old files
+        # # delete old files
         dir_files = [f for f in os.listdir(dload_path) if os.path.isfile(os.path.join(dload_path, f))]
         for filename in dir_files:
-            if filename != updated_clean_name2:
+            if filename != updated_clean_name:
                 fname_relpath = os.path.join(dload_path, filename)
                 os.remove(fname_relpath)
         
@@ -167,8 +157,8 @@ def chesscom_games(name, basepath):
         output_path = os.path.join(basepath, 'output')
         if not os.path.isdir(output_path):
             os.mkdir(output_path)
-        old_loc = os.path.join(dload_path, updated_clean_name2)
-        new_loc = os.path.join(output_path, updated_clean_name2)
+        old_loc = os.path.join(dload_path, updated_clean_name)
+        new_loc = os.path.join(output_path, updated_clean_name)
         os.rename(old_loc, new_loc)
         print('Chess.com game download complete')
     else:
@@ -247,7 +237,7 @@ def lichess_games(name, basepath):
         # get pgns
         for i in users:
             dte_val = dt.datetime.now().strftime('%Y%m%d%H%M%S')
-            dload_url = 'https://lichess.org/api/games/user/' + i[1] + '?perfType=bullet,blitz,rapid,classical,correspondence&sort=dateAsc'
+            dload_url = 'https://lichess.org/api/games/user/' + i[1] + '?perfType=bullet,blitz,rapid,classical,correspondence&clocks=true&evals=true&sort=dateAsc'
             dload_name = i[1] + '_' + dte_val + '.pgn'
             dload_file = os.path.join(dload_path, dload_name)
             hdr = {'Authorization': 'Bearer ' + token_value}
@@ -280,7 +270,7 @@ def lichess_games(name, basepath):
                 os.chdir(dload_path)
             os.system('cmd /C ' + cmd_text)
 
-        cmd_text = 'pgn-extract -C -N -V -D -pl2 --quiet --nosetuptags --output ' + clean_name + ' ' + merge_name + ' >nul'
+        cmd_text = 'pgn-extract -N -V -D -pl2 --quiet --nosetuptags --output ' + clean_name + ' ' + merge_name + ' >nul'
         if os.getcwd != dload_path:
             os.chdir(dload_path)
         os.system('cmd /C ' + cmd_text)
@@ -422,12 +412,11 @@ def process_games(basepath, timecontrol, startdate, enddate, color):
         gm_idx = gm_idx + 1
     
     sort_name = os.path.splitext(updated_tc_name)[0] + '_Sorted' + os.path.splitext(updated_tc_name)[1]
-    sort_file = open(os.path.join(output_path, sort_name), 'w')
+    sort_file = open(os.path.join(output_path, sort_name), 'w', encoding = 'utf-8')
     idx_sort = [x for _, x in sorted(zip(game_date, idx))]
     min_dte = game_date[idx_sort[0]].replace('.', '') if len(idx_sort) > 0 else '19000101'
     for i in idx_sort:
-        txt = str(game_text[i]).encode(encoding='utf-8', errors='replace')
-        sort_file.write(str(txt) + '\n\n')
+        sort_file.write(str(game_text[i]) + '\n\n')
     sort_file.close()  
     pgn.close()
    
