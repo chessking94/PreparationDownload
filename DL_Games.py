@@ -155,7 +155,6 @@ AND FirstName = '{name[1]}'
             os.chdir(dload_path)
         os.system('cmd /C ' + cmd_text)
 
-        # seems like pgn-extract is still writing parsing errors to stdout, can I suppress? if so, would need to do it here, below, and in Lichess block
         cmd_text = f'pgn-extract -N -V -D -pl2 --quiet --nosetuptags --output {clean_name} {merge_name} >nul'
         if os.getcwd != dload_path:
             os.chdir(dload_path)
@@ -167,10 +166,7 @@ AND FirstName = '{name[1]}'
         pgn_new = open(os.path.join(dload_path, updated_clean_name), 'w', encoding='utf-8')
         gm_txt = chess.pgn.read_game(pgn)
         while gm_txt is not None:
-            try:
-                variant_tag = gm_txt.headers['Variant']
-            except:
-                variant_tag = 'Standard'
+            variant_tag = gm_txt.headers.get('Variant') if gm_txt.headers.get('Variant') else 'Standard'
             if variant_tag == 'Standard':
                 pgn_new.write(str(gm_txt) + '\n\n')
             gm_txt = chess.pgn.read_game(pgn)
@@ -200,7 +196,7 @@ def format_date(date_string):
     # format dates in the PGN standard yyyy.mm.dd format
     try:
         dte = dt.datetime.strftime(dtp.parse(date_string), '%Y.%m.%d') if date_string is not None else None
-    except:
+    except dtp.ParserError:
         dte = None
         print(f'Unable to parse {date_string} as date, ignoring parameter')
     return dte
@@ -557,11 +553,11 @@ def parse_name(name):
     # return array ['Last', 'First']; otherwise ['name']
     parsed_name = []
     if ',' in name:
-        name = re.sub('\,\,+', ',', name)  # remove double commas
+        name = re.sub(r'\,\,+', ',', name)  # remove double commas
         parsed_name = [x.strip() for x in name.split(',')]
         return parsed_name
     elif ' ' in name:
-        name = re.sub('\ \ +', ' ', name)  # remove double spaces
+        name = re.sub(r'\ \ +', ' ', name)  # remove double spaces
         parsed_name = [x.strip() for x in name.split(' ')]
         parsed_name.reverse()
         return parsed_name
