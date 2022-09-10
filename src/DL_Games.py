@@ -2,6 +2,7 @@ import argparse
 import datetime as dt
 import fileinput
 import json
+import logging
 import os
 import re
 import shutil as sh
@@ -12,6 +13,9 @@ import dateutil.parser as dtp
 import pandas as pd
 import pyodbc as sql
 import requests
+
+# TODO: Revisit a class implementation
+
 
 NM_DELIM = '$$'  # hard to find a good delimiter that might not be used in a username or is an escape character in Windows
 
@@ -31,7 +35,7 @@ def archive_old(outpath):
                 new_name = os.path.join(archive_path, file)
                 sh.move(old_name, new_name)
 
-            print('Old files archived to ' + archive_path)
+            logging.info(f'Old files archived to {archive_path}')
 
 
 def check_backdoor(player, site):
@@ -40,11 +44,12 @@ def check_backdoor(player, site):
         if player[0] == 'CUSTOM':
             yn = yn_prompt('You are about to download a custom dataset. Continue? Y or N ===> ')
             if yn == 'N':
-                print('Process terminated by user!')
-                quit()
+                logging.critical('Process terminated by user!')
+                raise SystemExit
         else:
             if site is None:
-                raise RuntimeError('Player username ' + player[0] + ' was provided but no site specified')
+                logging.critical(f'Player username {player[0]} was provided but no site specified')
+                raise SystemExit
 
 
 def chesscom_games(name, basepath):
@@ -58,9 +63,9 @@ def chesscom_games(name, basepath):
     conn = sql.connect(conn_str)
     if len(name) == 1:
         if name[0].upper() == 'CUSTOM':  # backdoor to allow me to download custom datasets based on the original Excel selection process
-            qry_text = """
+            qry_text = f"""
 SELECT
-ISNULL(LastName, '') + '" + NM_DELIM + "' + ISNULL(FirstName, '') AS PlayerName,
+ISNULL(LastName, '') + '{NM_DELIM}' + ISNULL(FirstName, '') AS PlayerName,
 Username
 
 FROM UsernameXRef
@@ -71,7 +76,7 @@ AND DownloadFlag = 1
         else:
             qry_text = f"""
 SELECT
-ISNULL(LastName, '') + '" + NM_DELIM + "' + ISNULL(FirstName, '') AS PlayerName,
+ISNULL(LastName, '') + '{NM_DELIM}' + ISNULL(FirstName, '') AS PlayerName,
 Username
 
 FROM UsernameXRef
@@ -82,7 +87,7 @@ AND Username = '{name[0]}'
     else:
         qry_text = f"""
 SELECT
-ISNULL(LastName, '') + '" + NM_DELIM + "' + ISNULL(FirstName, '') AS PlayerName,
+ISNULL(LastName, '') + '{NM_DELIM}' + ISNULL(FirstName, '') AS PlayerName,
 Username
 
 FROM UsernameXRef
@@ -91,6 +96,7 @@ WHERE Source = 'Chess.com'
 AND LastName = '{name[0]}'
 AND FirstName = '{name[1]}'
 """
+    logging.debug(qry_text.replace('\n', ' '))
     users = pd.read_sql(qry_text, conn).values.tolist()
     rec_ct = len(users)
     conn.close()
@@ -99,7 +105,7 @@ AND FirstName = '{name[1]}'
     if len(name) == 1 and name[0].upper() != 'CUSTOM' and rec_ct == 0:  # username was passed, not in SQL table
         yn = yn_prompt('A username was passed but not found in the SQL reference table. Force download and continue? Y or N ===> ')
         if yn == 'N':
-            print('Process terminated by user!')
+            logging.critical('Process terminated by user!')
             raise SystemExit
         users = [[name[0], name[0]]]
         rec_ct = len(users)
@@ -111,7 +117,7 @@ AND FirstName = '{name[1]}'
             archive_url = f'https://api.chess.com/pub/player/{i[1]}/games/archives'
             with requests.get(archive_url) as resp:
                 if resp.status_code != 200:
-                    print(f'Unable to complete request! Request returned code {resp.status_code}')
+                    logging.warning(f'Unable to complete request to {archive_url}! Request returned code {resp.status_code}')
                     chk = 0
                 else:
                     json_data = resp.content
@@ -128,7 +134,7 @@ AND FirstName = '{name[1]}'
                     dload_file = os.path.join(dload_path, dload_name)
                     with requests.get(dload_url, stream=True) as resp:
                         if resp.status_code != 200:
-                            print('Unable to complete request! Request returned code ' + resp.status_code)
+                            logging.warning(f'Unable to complete request to {dload_url}! Request returned code {resp.status_code}')
                         else:
                             with open(dload_file, 'wb') as f:
                                 for chunk in resp.iter_content(chunk_size=8196):
@@ -142,54 +148,57 @@ AND FirstName = '{name[1]}'
                                 with open(dload_file, mode='w', encoding='utf-8', errors='ignore') as dl:
                                     dl.write(lines)
 
-        # merge and clean pgns
-        if rec_ct == 1:
-            merge_name = f'ChessCom_{users[0][0]}_Merged_{dte}.pgn'
-            clean_name = f'ChessCom_{users[0][0]}_AllGames_{dte}.pgn'
-        else:
-            merge_name = f'ChessCom_Multiple_Merged_{dte}.pgn'
-            clean_name = f'ChessCom_Multiple_AllGames_{dte}.pgn'
+        if os.path.isfile(dload_file):
+            # merge and clean pgns
+            if rec_ct == 1:
+                merge_name = f'ChessCom_{users[0][0]}_Merged_{dte}.pgn'
+                clean_name = f'ChessCom_{users[0][0]}_AllGames_{dte}.pgn'
+            else:
+                merge_name = f'ChessCom_Multiple_Merged_{dte}.pgn'
+                clean_name = f'ChessCom_Multiple_AllGames_{dte}.pgn'
 
-        cmd_text = f'copy /B *.pgn {merge_name} >nul'
-        if os.getcwd != dload_path:
-            os.chdir(dload_path)
-        os.system('cmd /C ' + cmd_text)
+            cmd_text = f'copy /B *.pgn {merge_name} >nul'
+            logging.debug(cmd_text)
+            if os.getcwd != dload_path:
+                os.chdir(dload_path)
+            os.system('cmd /C ' + cmd_text)
 
-        cmd_text = f'pgn-extract -N -V -D -pl2 --quiet --nosetuptags --output {clean_name} {merge_name} >nul'
-        if os.getcwd != dload_path:
-            os.chdir(dload_path)
-        os.system('cmd /C ' + cmd_text)
+            cmd_text = f'pgn-extract -N -V -D -pl2 --quiet --nosetuptags --output {clean_name} {merge_name} >nul'
+            logging.debug(cmd_text)
+            if os.getcwd != dload_path:
+                os.chdir(dload_path)
+            os.system('cmd /C ' + cmd_text)
 
-        # remove any non-standard games remaining; Chess.com standard games omit the Variant tag
-        pgn = open(os.path.join(dload_path, clean_name), mode='r', encoding='utf-8', errors='replace')
-        updated_clean_name = os.path.splitext(clean_name)[0] + '_NoVariant' + os.path.splitext(clean_name)[1]
-        pgn_new = open(os.path.join(dload_path, updated_clean_name), 'w', encoding='utf-8')
-        gm_txt = chess.pgn.read_game(pgn)
-        while gm_txt is not None:
-            variant_tag = gm_txt.headers.get('Variant') if gm_txt.headers.get('Variant') else 'Standard'
-            if variant_tag == 'Standard':
-                pgn_new.write(str(gm_txt) + '\n\n')
+            # remove any non-standard games remaining; Chess.com standard games omit the Variant tag
+            pgn = open(os.path.join(dload_path, clean_name), mode='r', encoding='utf-8', errors='replace')
+            updated_clean_name = os.path.splitext(clean_name)[0] + '_NoVariant' + os.path.splitext(clean_name)[1]
+            pgn_new = open(os.path.join(dload_path, updated_clean_name), 'w', encoding='utf-8')
             gm_txt = chess.pgn.read_game(pgn)
-        pgn.close()
-        pgn_new.close()
+            while gm_txt is not None:
+                variant_tag = gm_txt.headers.get('Variant') if gm_txt.headers.get('Variant') else 'Standard'
+                if variant_tag == 'Standard':
+                    pgn_new.write(str(gm_txt) + '\n\n')
+                gm_txt = chess.pgn.read_game(pgn)
+            pgn.close()
+            pgn_new.close()
 
-        # # delete old files
-        dir_files = [f for f in os.listdir(dload_path) if os.path.isfile(os.path.join(dload_path, f))]
-        for filename in dir_files:
-            if filename != updated_clean_name:
-                fname_relpath = os.path.join(dload_path, filename)
-                os.remove(fname_relpath)
+            # # delete old files
+            dir_files = [f for f in os.listdir(dload_path) if os.path.isfile(os.path.join(dload_path, f))]
+            for filename in dir_files:
+                if filename != updated_clean_name:
+                    fname_relpath = os.path.join(dload_path, filename)
+                    os.remove(fname_relpath)
 
-        # move to new folder
-        output_path = os.path.join(basepath, 'output')
-        if not os.path.isdir(output_path):
-            os.mkdir(output_path)
-        old_loc = os.path.join(dload_path, updated_clean_name)
-        new_loc = os.path.join(output_path, updated_clean_name)
-        os.rename(old_loc, new_loc)
-        print('Chess.com game download complete')
+            # move to new folder
+            output_path = os.path.join(basepath, 'output')
+            if not os.path.isdir(output_path):
+                os.mkdir(output_path)
+            old_loc = os.path.join(dload_path, updated_clean_name)
+            new_loc = os.path.join(output_path, updated_clean_name)
+            os.rename(old_loc, new_loc)
+            logging.info('Chess.com game download complete')
     else:
-        print('No Chess.com games to download')
+        logging.info('No Chess.com games to download')
 
 
 def format_date(date_string):
@@ -198,7 +207,7 @@ def format_date(date_string):
         dte = dt.datetime.strftime(dtp.parse(date_string), '%Y.%m.%d') if date_string is not None else None
     except dtp.ParserError:
         dte = None
-        print(f'Unable to parse {date_string} as date, ignoring parameter')
+        logging.warning(f'Unable to parse {date_string} as date, ignoring parameter')
     return dte
 
 
@@ -206,6 +215,14 @@ def get_conf(key):
     fpath = r'C:\Users\eehunt\Repository'
     fname = 'confidential.json'
     with open(os.path.join(fpath, fname), 'r') as t:
+        key_data = json.load(t)
+    val = key_data.get(key)
+    return val
+
+
+def get_config(filepath, key):
+    filename = os.path.join(filepath, 'config.json')
+    with open(filename, 'r') as t:
         key_data = json.load(t)
     val = key_data.get(key)
     return val
@@ -234,19 +251,20 @@ def lichess_games(name, basepath):
     conn = sql.connect(conn_str)
     if len(name) == 1:
         if name[0].upper() == 'CUSTOM':  # backdoor to allow me to download custom datasets based on the original Excel selection process
-            qry_text = """
+            qry_text = f"""
 SELECT
-ISNULL(LastName, '') + '" + NM_DELIM + "' + ISNULL(FirstName, '') AS PlayerName,
+ISNULL(LastName, '') + '{NM_DELIM}' + ISNULL(FirstName, '') AS PlayerName,
 Username
 
 FROM UsernameXRef
 
 WHERE Source = 'Lichess'
-AND DownloadFlag = 1"""
+AND DownloadFlag = 1
+"""
         else:
             qry_text = f"""
 SELECT
-ISNULL(LastName, '') + '" + NM_DELIM + "' + ISNULL(FirstName, '') AS PlayerName,
+ISNULL(LastName, '') + '{NM_DELIM}' + ISNULL(FirstName, '') AS PlayerName,
 Username
 
 FROM UsernameXRef
@@ -257,7 +275,7 @@ AND Username = '{name[0]}'
     else:
         qry_text = f"""
 SELECT
-ISNULL(LastName, '') + '" + NM_DELIM + "' + ISNULL(FirstName, '') AS PlayerName,
+ISNULL(LastName, '') + '{NM_DELIM}' + ISNULL(FirstName, '') AS PlayerName,
 Username
 
 FROM UsernameXRef
@@ -266,6 +284,7 @@ WHERE Source = 'Lichess'
 AND LastName = '{name[0]}'
 AND FirstName = '{name[1]}'
 """
+    logging.debug(qry_text.replace('\n', ' '))
     users = pd.read_sql(qry_text, conn).values.tolist()
     rec_ct = len(users)
     conn.close()
@@ -274,8 +293,8 @@ AND FirstName = '{name[1]}'
     if len(name) == 1 and name[0].upper() != 'CUSTOM' and rec_ct == 0:  # username was passed, not in SQL table
         yn = yn_prompt('A username was passed but not found in the SQL reference table. Force download and continue? Y or N ===> ')
         if yn == 'N':
-            print('Process terminated by user!')
-            quit()
+            logging.critical('Process terminated by user!')
+            raise SystemExit
         users = [[name[0], name[0]]]
         rec_ct = len(users)
         repl_nm = 0
@@ -292,7 +311,7 @@ AND FirstName = '{name[1]}'
             hdr = {'Authorization': f'Bearer {token_value}'}
             with requests.get(dload_url, headers=hdr, stream=True) as resp:
                 if resp.status_code != 200:
-                    print(f'Unable to complete request! Request returned code {resp.status_code}')
+                    logging.warning(f'Unable to complete request to {dload_url}! Request returned code {resp.status_code}')
                 else:
                     with open(dload_file, 'wb') as f:
                         for chunk in resp.iter_content(chunk_size=8196):
@@ -306,41 +325,44 @@ AND FirstName = '{name[1]}'
                         with open(dload_file, mode='w', encoding='utf-8', errors='ignore') as dl:
                             dl.write(lines)
 
-        # merge and clean pgns
-        dte_val = dt.datetime.now().strftime('%Y%m%d%H%M%S')
-        if rec_ct == 1:
-            merge_name = dload_name
-            clean_name = f'Lichess_{users[0][0]}_AllGames_{dte_val}.pgn'
-        else:
-            merge_name = f'Lichess_Multiple_Merged_{dte_val}.pgn'
-            clean_name = f'Lichess_Multiple_AllGames_{dte_val}.pgn'
-            cmd_text = f'copy /B *.pgn {merge_name} >nul'
+        if os.path.isfile(dload_file):  # file was created earlier
+            # merge and clean pgns
+            dte_val = dt.datetime.now().strftime('%Y%m%d%H%M%S')
+            if rec_ct == 1:
+                merge_name = dload_name
+                clean_name = f'Lichess_{users[0][0]}_AllGames_{dte_val}.pgn'
+            else:
+                merge_name = f'Lichess_Multiple_Merged_{dte_val}.pgn'
+                clean_name = f'Lichess_Multiple_AllGames_{dte_val}.pgn'
+                cmd_text = f'copy /B *.pgn {merge_name} >nul'
+                logging.debug(cmd_text)
+                if os.getcwd != dload_path:
+                    os.chdir(dload_path)
+                os.system('cmd /C ' + cmd_text)
+
+            cmd_text = f'pgn-extract -N -V -D -pl2 --quiet --nosetuptags --output {clean_name} {merge_name} >nul'
+            logging.debug(cmd_text)
             if os.getcwd != dload_path:
                 os.chdir(dload_path)
             os.system('cmd /C ' + cmd_text)
 
-        cmd_text = f'pgn-extract -N -V -D -pl2 --quiet --nosetuptags --output {clean_name} {merge_name} >nul'
-        if os.getcwd != dload_path:
-            os.chdir(dload_path)
-        os.system('cmd /C ' + cmd_text)
+            # delete old files
+            dir_files = [f for f in os.listdir(dload_path) if os.path.isfile(os.path.join(dload_path, f))]
+            for filename in dir_files:
+                if filename != clean_name:
+                    fname_relpath = os.path.join(dload_path, filename)
+                    os.remove(fname_relpath)
 
-        # delete old files
-        dir_files = [f for f in os.listdir(dload_path) if os.path.isfile(os.path.join(dload_path, f))]
-        for filename in dir_files:
-            if filename != clean_name:
-                fname_relpath = os.path.join(dload_path, filename)
-                os.remove(fname_relpath)
-
-        # move to new folder
-        output_path = os.path.join(basepath, 'output')
-        if not os.path.isdir(output_path):
-            os.mkdir(output_path)
-        old_loc = os.path.join(dload_path, clean_name)
-        new_loc = os.path.join(output_path, clean_name)
-        os.rename(old_loc, new_loc)
-        print('Lichess game download complete')
+            # move to new folder
+            output_path = os.path.join(basepath, 'output')
+            if not os.path.isdir(output_path):
+                os.mkdir(output_path)
+            old_loc = os.path.join(dload_path, clean_name)
+            new_loc = os.path.join(output_path, clean_name)
+            os.rename(old_loc, new_loc)
+            logging.info('Lichess game download complete')
     else:
-        print('No Lichess games to download')
+        logging.info('No Lichess games to download')
 
 
 def process_games(basepath, timecontrol, startdate, enddate, color):
@@ -359,6 +381,7 @@ def process_games(basepath, timecontrol, startdate, enddate, color):
     # combine or rename file(s) downloaded
     merge_name = f"{player_name.replace(NM_DELIM, '')}_AllGames.pgn"
     cmd_text = f'copy /B *.pgn {merge_name} >nul'
+    logging.debug(cmd_text)
     if os.getcwd != output_path:
         os.chdir(output_path)
     os.system('cmd /C ' + cmd_text)
@@ -378,6 +401,7 @@ def process_games(basepath, timecontrol, startdate, enddate, color):
 
     # time control extract
     if timecontrol is not None:
+        logging.debug(f'TimeControl: {timecontrol}')
         tc_min = get_timecontrollimits(timecontrol, 'Min')
         tc_max = get_timecontrollimits(timecontrol, 'Max')
 
@@ -397,6 +421,7 @@ def process_games(basepath, timecontrol, startdate, enddate, color):
         # filter min time control
         tmp_file = f'temp{timecontrol}_{merge_name}'
         cmd_text = f'pgn-extract --quiet -t{tc_tag_file_min} --output {tmp_file} {updated_tc_name} >nul'
+        logging.debug(cmd_text)
         if os.getcwd != output_path:
             os.chdir(output_path)
         os.system('cmd /C ' + cmd_text)
@@ -404,6 +429,7 @@ def process_games(basepath, timecontrol, startdate, enddate, color):
         # filter max time control
         new_file = f'{timecontrol}_{merge_name}'
         cmd_text = f'pgn-extract --quiet -t{tc_tag_file_max} --output {new_file} {tmp_file} >nul'
+        logging.debug(cmd_text)
         if os.getcwd != output_path:
             os.chdir(output_path)
         os.system('cmd /C ' + cmd_text)
@@ -412,6 +438,7 @@ def process_games(basepath, timecontrol, startdate, enddate, color):
 
     # start date extract
     if startdate is not None:
+        logging.debug(f'Start date: {startdate}')
         # create start date tag file
         sd_tag_file = 'StartDateTag.txt'
         sd_tag_file_full = os.path.join(output_path, sd_tag_file)
@@ -422,6 +449,7 @@ def process_games(basepath, timecontrol, startdate, enddate, color):
         # filter start date
         sd_file = f'SD_{new_file}'
         cmd_text = f'pgn-extract --quiet -t{sd_tag_file} --output {sd_file} {new_file} >nul'
+        logging.debug(cmd_text)
         if os.getcwd != output_path:
             os.chdir(output_path)
         os.system('cmd /C ' + cmd_text)
@@ -430,6 +458,7 @@ def process_games(basepath, timecontrol, startdate, enddate, color):
 
     # end date extract
     if enddate is not None:
+        logging.debug(f'End date: {enddate}')
         # create end date tag file
         ed_tag_file = 'EndDateTag.txt'
         ed_tag_file_full = os.path.join(output_path, ed_tag_file)
@@ -440,6 +469,7 @@ def process_games(basepath, timecontrol, startdate, enddate, color):
         # filter end date
         ed_file = f'ED_{sd_file}'
         cmd_text = f'pgn-extract --quiet -t{ed_tag_file} --output {ed_file} {sd_file} >nul'
+        logging.debug(cmd_text)
         if os.getcwd != output_path:
             os.chdir(output_path)
         os.system('cmd /C ' + cmd_text)
@@ -500,12 +530,14 @@ def process_games(basepath, timecontrol, startdate, enddate, color):
     # create white/black tag files
     wh_tag_file = 'WhiteTag.txt'
     cmd_text = 'echo White "' + player_name.replace(NM_DELIM, ', ') + '" >> ' + wh_tag_file
+    logging.debug(cmd_text)
     if os.getcwd != output_path:
         os.chdir(output_path)
     os.system('cmd /C ' + cmd_text)
 
     bl_tag_file = 'BlackTag.txt'
     cmd_text = 'echo Black "' + player_name.replace(NM_DELIM, ', ') + '" >> ' + bl_tag_file
+    logging.debug(cmd_text)
     if os.getcwd != output_path:
         os.chdir(output_path)
     os.system('cmd /C ' + cmd_text)
@@ -513,22 +545,20 @@ def process_games(basepath, timecontrol, startdate, enddate, color):
     # split into applicable color files
     if color in ['White', None]:
         cmd_text = f'pgn-extract --quiet -t{wh_tag_file} --output {new_white} {sort_name} >nul'
+        logging.debug(cmd_text)
         if os.getcwd != output_path:
             os.chdir(output_path)
         os.system('cmd /C ' + cmd_text)
 
     if color in ['Black', None]:
         cmd_text = f'pgn-extract --quiet -t{bl_tag_file} --output {new_black} {sort_name} >nul'
+        logging.debug(cmd_text)
         if os.getcwd != output_path:
             os.chdir(output_path)
         os.system('cmd /C ' + cmd_text)
 
-    # need to run a dummy pgn-extract on new_combined if being kept, it's formatted as bytes
-    if color == 'Combined':
-        cmd_text = f'pgn-extract --quiet --output {new_combined} {sort_name} >nul'
-        if os.getcwd != output_path:
-            os.chdir(output_path)
-        os.system('cmd /C ' + cmd_text)
+    # rename combined file
+    os.rename(os.path.join(output_path, sort_name), os.path.join(output_path, new_combined))
 
     # clean up
     files_to_keep = []
@@ -544,7 +574,7 @@ def process_games(basepath, timecontrol, startdate, enddate, color):
             fname_relpath = os.path.join(output_path, filename)
             os.remove(fname_relpath)
 
-    print(f'PGN processing complete, files located at {output_path}')
+    logging.info(f'PGN processing complete, files located at {output_path}')
 
     return game_ct
 
@@ -566,7 +596,7 @@ def parse_name(name):
         return parsed_name
 
 
-def validate_path(path, def_path):
+def validate_path(path, root_path):
     # verifiy path exists for game output
     ret = path
     if not os.path.isdir(path):
@@ -574,7 +604,8 @@ def validate_path(path, def_path):
         if yn == 'Y':
             os.mkdir(path)
         else:
-            ret = def_path
+            logging.info(f'User chose not to create new path, using default path {root_path}')
+            ret = root_path
     return ret
 
 
@@ -582,11 +613,17 @@ def yn_prompt(prompt):
     # general Yes/No prompt
     yn = ''
     yn_val = ['Y', 'N']
+    ct = 0
     while yn not in yn_val:
         yn = input(prompt)
         yn = yn.upper()
         if yn not in yn_val:
-            print('Invalid parameter passed, please try again!')
+            ct = ct + 1
+            if ct < 3:
+                logging.warning(f'Parameter "{yn}" is invalid, please try again!')
+            else:
+                logging.critical('Three consecutive bad parameters, process terminated!')
+                raise SystemExit
     return yn
 
 
@@ -616,15 +653,21 @@ def write_log(wr_type, player, site, timecontrol, color, startdate, enddate, out
         sql_cmd = f"UPDATE DownloadLog SET DownloadStatus = 'Complete', DownloadSeconds = {dl_time}, DownloadGames = {game_ct} WHERE DownloadID = {curr_id}"
 
     if sql_cmd != '':
+        logging.debug(sql_cmd)
         csr.execute(sql_cmd)
         conn.commit()
     conn.close()
 
 
 def main():
+    logging.basicConfig(
+        format='%(asctime)s\t%(funcName)s\t%(levelname)s\t%(message)s',
+        level=logging.INFO
+    )
+
     # set up CLI parser
-    def_path = r'C:\Users\eehunt\Documents\Chess\Scripts'
-    vrs_num = '1.8'
+    root_path = get_config(os.path.dirname(os.path.dirname(__file__)), 'rootPath')
+    vrs_num = '1.9'
     parser = argparse.ArgumentParser(
         description='Chess.com and Lichess Game Downloader',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -673,7 +716,7 @@ def main():
     )
     parser.add_argument(
         '--outpath',
-        default=def_path,
+        default=root_path,
         help='Root path to output files to'
     )
     """
@@ -689,7 +732,7 @@ def main():
     color = config['color']
     startdate = format_date(config['startdate'])
     enddate = format_date(config['enddate'])
-    outpath = validate_path(config['outpath'], def_path)
+    outpath = validate_path(config['outpath'], root_path)
 
     # check backdoor and validate username-only entry
     check_backdoor(player, site)
