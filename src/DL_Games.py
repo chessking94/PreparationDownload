@@ -15,6 +15,7 @@ import pyodbc as sql
 import requests
 
 # TODO: Revisit a class implementation
+# TODO: Allow both CLI and config file parameters
 
 
 NM_DELIM = '$$'  # hard to find a good delimiter that might not be used in a username or is an escape character in Windows
@@ -392,8 +393,8 @@ def process_games(basepath, timecontrol, startdate, enddate, color):
     nfile = os.path.join(output_path, updated_tc_name)
     searchExp = '[TimeControl "-"]'
     replaceExp = '[TimeControl "1/86400"]'
-    wfile = open(nfile, 'w')
-    for line in fileinput.input(ofile):
+    wfile = open(nfile, mode='w', encoding='utf-8', errors='replace')
+    for line in fileinput.input(ofile, openhook=fileinput.hook_encoded('utf-8')):
         if searchExp in line:
             line = line.replace(searchExp, replaceExp)
         wfile.write(line)
@@ -477,7 +478,7 @@ def process_games(basepath, timecontrol, startdate, enddate, color):
         ed_file = sd_file
 
     # sort game file
-    pgn = open(os.path.join(output_path, ed_file), mode='r', encoding='utf-8', errors='replace')
+    pgn = open(os.path.join(output_path, ed_file), mode='r', encoding='utf-8')
 
     idx = []
     game_date = []
@@ -522,7 +523,7 @@ def process_games(basepath, timecontrol, startdate, enddate, color):
     # count games in sort_name for return value
     game_ct = 0
     search_text = '[Event "'
-    with open(os.path.join(output_path, sort_name), 'r') as f:
+    with open(os.path.join(output_path, sort_name), 'r', encoding='utf-8') as f:
         for line in f:
             if search_text in line:
                 game_ct = game_ct + 1
