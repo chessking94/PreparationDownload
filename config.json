@@ -1,3 +1,13 @@
 {
-	"rootPath": "C:/Users/eehunt/Documents/Chess/Scripts"
+	"rootPath": "C:/Users/eehunt/Documents/Chess/Scripts",
+	"data": {
+		"useConfig": false,
+		"player": "MagnusCarlsen",
+		"site": "Chess.com",
+		"timecontrol": "",
+		"color": "",
+		"startdate": "",
+		"enddate": "",
+		"outpath": ""
+	}
 }

@@ -15,10 +15,14 @@ import pyodbc as sql
 import requests
 
 # TODO: Revisit a class implementation
-# TODO: Allow both CLI and config file parameters
+# TODO: Support for variants
+# TODO: Additional arguments for ECO, minimum number of moves, etc. Might require pgn-extract loops
 
 
 NM_DELIM = '$$'  # hard to find a good delimiter that might not be used in a username or is an escape character in Windows
+SITE_CHOICES = ['Chess.com', 'Lichess']
+TIMECONTROL_CHOICES = ['Bullet', 'Blitz', 'Rapid', 'Classical', 'Correspondence']
+COLOR_CHOICES = ['White', 'Black', 'Combined']
 
 
 def archive_old(outpath):
@@ -204,11 +208,14 @@ AND FirstName = '{name[1]}'
 
 def format_date(date_string):
     # format dates in the PGN standard yyyy.mm.dd format
-    try:
-        dte = dt.datetime.strftime(dtp.parse(date_string), '%Y.%m.%d') if date_string is not None else None
-    except dtp.ParserError:
+    if date_string != '':
+        try:
+            dte = dt.datetime.strftime(dtp.parse(date_string), '%Y.%m.%d') if date_string is not None else None
+        except dtp.ParserError:
+            dte = None
+            logging.warning(f'Unable to parse {date_string} as date, ignoring parameter')
+    else:
         dte = None
-        logging.warning(f'Unable to parse {date_string} as date, ignoring parameter')
     return dte
 
 
@@ -582,6 +589,9 @@ def process_games(basepath, timecontrol, startdate, enddate, color):
 
 def parse_name(name):
     # return array ['Last', 'First']; otherwise ['name']
+    if not name or name.strip() == '':
+        logging.critical('Blank name!')
+        raise SystemExit
     parsed_name = []
     if ',' in name:
         name = re.sub(r'\,\,+', ',', name)  # remove double commas
@@ -597,10 +607,37 @@ def parse_name(name):
         return parsed_name
 
 
+def validate_color(color):
+    color = color.lower().capitalize()
+    if color not in COLOR_CHOICES:
+        if color != '':
+            logging.warning(f'Invalid color provided, ignoring|{color}')
+        color = None
+    return color
+
+
+def validate_site(site):
+    site = site.lower().capitalize()
+    if site not in SITE_CHOICES:
+        if site != '':
+            logging.warning(f'Invalid site provided, ignoring|{site}')
+        site = None
+    return site
+
+
+def validate_timecontrol(timecontrol):
+    timecontrol = timecontrol.lower().capitalize()
+    if timecontrol not in TIMECONTROL_CHOICES:
+        if timecontrol != '':
+            logging.warning(f'Invalid timecontrol provided, ignoring|{timecontrol}')
+        timecontrol = None
+    return timecontrol
+
+
 def validate_path(path, root_path):
     # verifiy path exists for game output
-    ret = path
-    if not os.path.isdir(path):
+    ret = path if path != '' else root_path
+    if not os.path.isdir(ret):
         yn = yn_prompt(f'Do you want to create the new path {path} ? Y or N ===> ')
         if yn == 'Y':
             os.mkdir(path)
@@ -666,71 +703,68 @@ def main():
         level=logging.INFO
     )
 
-    # set up CLI parser
     root_path = get_config(os.path.dirname(os.path.dirname(__file__)), 'rootPath')
-    vrs_num = '1.9'
-    parser = argparse.ArgumentParser(
-        description='Chess.com and Lichess Game Downloader',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        usage=argparse.SUPPRESS
-    )
-    parser.add_argument(
-        '-v', '--version',
-        action='version',
-        version='%(prog)s ' + vrs_num
-    )
-    parser.add_argument(
-        '-p', '--player',
-        default='CUSTOM',
-        help='Player name'
-    )
-    parser.add_argument(
-        '-s', '--site',
-        default=None,
-        nargs='?',
-        choices=['Chess.com', 'Lichess'],
-        help='Website to download games from'
-    )
-    parser.add_argument(
-        '-t', '--timecontrol',
-        default=None,
-        nargs='?',
-        choices=['Bullet', 'Blitz', 'Rapid', 'Classical', 'Correspondence'],
-        help='Time control of games to download'
-    )
-    parser.add_argument(
-        '-c', '--color',
-        default=None,
-        nargs='?',
-        choices=['White', 'Black', 'Combined'],
-        help='Color of player games'
-    )
-    parser.add_argument(
-        '--startdate',
-        nargs='?',
-        help='Do not include games before this date'
-    )
-    parser.add_argument(
-        '--enddate',
-        nargs='?',
-        help='Do not include games after this date'
-    )
-    parser.add_argument(
-        '--outpath',
-        default=root_path,
-        help='Root path to output files to'
-    )
-    """
-    Future Arguments:
-    game type (variants) - Would be nice to have support for variants, but that would take more thought and be useless for my purposes
-    finer details like ECO, minimum number of moves - might need some kind of pgn-extract loop thing for this, lower priority
-    """
-    args = parser.parse_args()
-    config = vars(args)
+    vrs_num = '2.0'
+    config = get_config(os.path.dirname(os.path.dirname(__file__)), 'data')
+    if not config['useConfig']:
+        parser = argparse.ArgumentParser(
+            description='Chess.com and Lichess Game Downloader',
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            usage=argparse.SUPPRESS
+        )
+        parser.add_argument(
+            '-v', '--version',
+            action='version',
+            version='%(prog)s ' + vrs_num
+        )
+        parser.add_argument(
+            '-p', '--player',
+            default='CUSTOM',
+            help='Player name'
+        )
+        parser.add_argument(
+            '-s', '--site',
+            default=None,
+            nargs='?',
+            choices=SITE_CHOICES,
+            help='Website to download games from'
+        )
+        parser.add_argument(
+            '-t', '--timecontrol',
+            default=None,
+            nargs='?',
+            choices=TIMECONTROL_CHOICES,
+            help='Time control of games to download'
+        )
+        parser.add_argument(
+            '-c', '--color',
+            default=None,
+            nargs='?',
+            choices=COLOR_CHOICES,
+            help='Color of player games'
+        )
+        parser.add_argument(
+            '--startdate',
+            nargs='?',
+            help='Do not include games before this date'
+        )
+        parser.add_argument(
+            '--enddate',
+            nargs='?',
+            help='Do not include games after this date'
+        )
+        parser.add_argument(
+            '--outpath',
+            default=root_path,
+            help='Root path to output files to'
+        )
+        args = parser.parse_args()
+        config = vars(args)
+
     player = parse_name(config['player'])
-    site = config['site']
-    timecontrol = config['timecontrol']
-    color = config['color']
+    site = validate_site(config['site'])
+    timecontrol = validate_timecontrol(config['timecontrol'])
+    color = validate_color(config['color'])
     startdate = format_date(config['startdate'])
     enddate = format_date(config['enddate'])
     outpath = validate_path(config['outpath'], root_path)
