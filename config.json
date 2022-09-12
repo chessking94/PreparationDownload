@@ -1,5 +1,6 @@
 {
 	"rootPath": "C:/Users/eehunt/Documents/Chess/Scripts",
+	"nameDelimiter": "$$",
 	"data": {
 		"useConfig": false,
 		"player": "MagnusCarlsen",
