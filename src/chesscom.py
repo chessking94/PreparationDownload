@@ -60,7 +60,10 @@ def chesscom_games(name, basepath):
                     archive_list = json.loads(json_data)
                     chk = 1
             if chk == 1:
+                url_ct = len(archive_list['archives'])
+                ct = 1
                 for url in archive_list['archives']:
+                    logging.info(f'Currently downloading Chess.com game file {ct} of {url_ct}')
                     dload_url = f'{url}/pgn'
                     search_start = '/games/'
                     start = url.find(search_start) + len(search_start)
@@ -83,6 +86,7 @@ def chesscom_games(name, basepath):
                                 lines = re.sub(txt_old, txt_new, lines, flags=re.IGNORECASE)
                                 with open(dload_file, mode='w', encoding='utf-8', errors='ignore') as dl:
                                     dl.write(lines)
+                    ct = ct + 1
 
         if os.path.isfile(dload_file):
             # merge and clean pgns

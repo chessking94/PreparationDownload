@@ -44,6 +44,7 @@ def lichess_games(name, basepath):
         repl_nm = 0
 
     if rec_ct > 0:
+        logging.info('Lichess game download started')
         token_value = func.get_conf('LichessAPIToken')
 
         # get pgns
@@ -104,6 +105,8 @@ def lichess_games(name, basepath):
             old_loc = os.path.join(dload_path, clean_name)
             new_loc = os.path.join(output_path, clean_name)
             os.rename(old_loc, new_loc)
+            logging.info('Lichess game download complete')
+        else:
             logging.info('Lichess game download complete')
     else:
         logging.info('No Lichess games to download')

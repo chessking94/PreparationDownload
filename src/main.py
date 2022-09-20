@@ -12,6 +12,9 @@ from process import process_games
 
 # TODO: Support for variants
 # TODO: Additional arguments for ECO, minimum number of moves, etc. Might require pgn-extract loops
+# TODO: Review formatting of paths in logging calls
+# TODO: Running VRK/Lichess resulted in an empty game file, but log table said 6k+ games
+# TODO: Also probably need to review game counts when only one color is requested
 
 
 def main():
@@ -23,6 +26,7 @@ def main():
     root_path = func.get_config(os.path.dirname(os.path.dirname(__file__)), 'rootPath')
     vrs_num = '2.0'
     config = func.get_config(os.path.dirname(os.path.dirname(__file__)), 'data')
+    writelog = func.get_config(os.path.dirname(os.path.dirname(__file__)), 'writeLog')
     if not config['useConfig']:
         parser = argparse.ArgumentParser(
             description='Chess.com and Lichess Game Downloader',
@@ -90,7 +94,8 @@ def main():
     func.check_backdoor(player, site)
 
     # create DownloadLog record
-    queries.write_log('New', ', '.join(player), site, timecontrol, color, startdate, enddate, outpath, None, None)
+    if writelog:
+        queries.write_log('New', ', '.join(player), site, timecontrol, color, startdate, enddate, outpath, None, None)
     proc_start = dt.datetime.now()
 
     # process request
@@ -104,7 +109,8 @@ def main():
     # update DownloadLog record
     proc_end = dt.datetime.now()
     dl_time = (proc_end - proc_start).seconds
-    queries.write_log('Update', None, None, None, None, None, None, None, dl_time, game_ct)
+    if writelog:
+        queries.write_log('Update', None, None, None, None, None, None, None, dl_time, game_ct)
 
 
 if __name__ == '__main__':
