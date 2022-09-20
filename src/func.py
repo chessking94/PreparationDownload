@@ -49,7 +49,7 @@ def archive_old(outpath):
                 new_name = os.path.join(archive_path, file)
                 shutil.move(old_name, new_name)
 
-            logging.info(f'Old files archived to {archive_path}')
+            logging.info(f'Old files archived to {os.path.normpath(archive_path)}')
 
 
 def check_backdoor(player, site):

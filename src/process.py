@@ -219,6 +219,6 @@ def process_games(basepath, timecontrol, startdate, enddate, color):
             fname_relpath = os.path.join(output_path, filename)
             os.remove(fname_relpath)
 
-    logging.info(f'PGN processing complete, files located at {output_path}')
+    logging.info(f'PGN processing complete, files located at {os.path.normpath(output_path)}')
 
     return game_ct
