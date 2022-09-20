@@ -164,14 +164,6 @@ def process_games(basepath, timecontrol, startdate, enddate, color):
     new_black = f'{base_name}_Black.pgn'
     new_combined = f'{base_name}_Combined.pgn'
 
-    # count games in sort_name for return value
-    game_ct = 0
-    search_text = '[Event "'
-    with open(os.path.join(output_path, sort_name), 'r', encoding='utf-8') as f:
-        for line in f:
-            if search_text in line:
-                game_ct = game_ct + 1
-
     # create white/black tag files
     wh_tag_file = 'WhiteTag.txt'
     cmd_text = 'echo White "' + player_name.replace(nd, ', ') + '" >> ' + wh_tag_file
@@ -213,6 +205,21 @@ def process_games(basepath, timecontrol, startdate, enddate, color):
         files_to_keep.append(new_black)
     if color == 'Combined':
         files_to_keep.append(new_combined)
+
+    # count games in sort_name for return value
+    if color in ['Combined', None]:
+        ct_file = new_combined
+    elif color == 'White':
+        ct_file = new_white
+    elif color == 'Black':
+        ct_file == new_black
+    game_ct = 0
+    search_text = '[Event "'
+    with open(os.path.join(output_path, ct_file), 'r', encoding='utf-8') as f:
+        for line in f:
+            if search_text in line:
+                game_ct = game_ct + 1
+
     dir_files = [f for f in os.listdir(output_path) if os.path.isfile(os.path.join(output_path, f))]
     for filename in dir_files:
         if filename not in files_to_keep:
