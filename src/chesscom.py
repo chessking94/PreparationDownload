@@ -49,9 +49,10 @@ def chesscom_games(name, basepath):
 
     if rec_ct > 0:
         # get pgns
+        headers = func.get_conf('CDC_UserAgent')
         for i in users:
             archive_url = f'https://api.chess.com/pub/player/{i[1]}/games/archives'
-            with requests.get(archive_url) as resp:
+            with requests.get(archive_url, headers=headers) as resp:
                 if resp.status_code != 200:
                     logging.warning(f'Unable to complete request to {archive_url}! Request returned code {resp.status_code}')
                     chk = 0
@@ -71,7 +72,7 @@ def chesscom_games(name, basepath):
                     mm = url[-2:]
                     dload_name = f'{i[1]}_{yyyy}{mm}.pgn'
                     dload_file = os.path.join(dload_path, dload_name)
-                    with requests.get(dload_url, stream=True) as resp:
+                    with requests.get(dload_url, stream=True, headers=headers) as resp:
                         if resp.status_code != 200:
                             logging.warning(f'Unable to complete request to {dload_url}! Request returned code {resp.status_code}')
                         else:
