@@ -49,7 +49,7 @@ def chesscom_games(name, basepath):
 
     if rec_ct > 0:
         # get pgns
-        headers = func.get_conf('CDC_UserAgent')
+        headers = eval(func.get_conf('CDC_UserAgent'))
         for i in users:
             archive_url = f'https://api.chess.com/pub/player/{i[1]}/games/archives'
             with requests.get(archive_url, headers=headers) as resp:
