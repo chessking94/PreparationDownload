@@ -1,5 +1,6 @@
-chess==1.6.1
-pandas==1.3.1
-pyodbc==4.0.30
+automation @ file:///X:/Development/repo/Automation/release/automation-1.6.1.tar.gz#sha256=9f0674206503004e772ee96f4ff3db3e3f8ede136c5839582dec0d6fa7db3b12
+chess==1.10.1
+pandas==2.1.4
+pyodbc==5.0.1
 python_dateutil==2.8.2
-requests==2.26.0
+requests==2.31.0

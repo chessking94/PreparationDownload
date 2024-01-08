@@ -4,26 +4,27 @@ import logging
 import os
 import re
 
+from automation import misc
 import chess
 import chess.pgn
 import pandas as pd
 import pyodbc as sql
 import requests
 
-import func
+from . import CONFIG_FILE
 import queries as qry
 import validation as v
 
 
 def chesscom_games(name, basepath):
     # download Chess.com user games
-    nd = func.get_config(os.path.dirname(os.path.dirname(__file__)), 'nameDelimiter')
+    nd = misc.get_config('nameDelimiter', CONFIG_FILE)
     dload_path = os.path.join(basepath, 'ChessCom')
     if not os.path.isdir(dload_path):
         os.mkdir(dload_path)
     dte = dt.datetime.now().strftime('%Y%m%d%H%M%S')
 
-    conn_str = func.get_conf('SqlServerConnectionStringTrusted')
+    conn_str = misc.get_config('connectionString_chessDB', CONFIG_FILE)
     conn = sql.connect(conn_str)
     if len(name) == 1:
         if name[0].upper() == 'CUSTOM':  # backdoor to allow me to download custom datasets based on the original Excel selection process
@@ -49,7 +50,7 @@ def chesscom_games(name, basepath):
 
     if rec_ct > 0:
         # get pgns
-        headers = eval(func.get_conf('CDC_UserAgent'))
+        headers = eval(misc.get_config('CDC_UserAgent', CONFIG_FILE))
         for i in users:
             archive_url = f'https://api.chess.com/pub/player/{i[1]}/games/archives'
             with requests.get(archive_url, headers=headers) as resp:

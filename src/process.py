@@ -3,15 +3,17 @@ import fileinput
 import logging
 import os
 
+from automation import misc
 import chess
 import chess.pgn
 
+from . import CONFIG_FILE
 import func
 
 
 def process_games(basepath, timecontrol, startdate, enddate, color):
     # process downloaded games per specifications
-    nd = func.get_config(os.path.dirname(os.path.dirname(__file__)), 'nameDelimiter')
+    nd = misc.get_config('nameDelimiter', CONFIG_FILE)
     output_path = os.path.join(basepath, 'output')
     file_list = [f for f in os.listdir(output_path) if os.path.isfile(os.path.join(output_path, f))]
 

@@ -1,8 +1,10 @@
 import argparse
 import datetime as dt
 import logging
-import os
 
+from automation import misc
+
+from . import CONFIG_FILE
 import func
 import queries
 import validation as v
@@ -12,9 +14,7 @@ from process import process_games
 
 # TODO: Support for variants
 # TODO: Additional arguments for ECO, minimum number of moves, etc. Might require pgn-extract loops
-# TODO: Review formatting of paths in logging calls
-# TODO: Running VRK/Lichess resulted in an empty game file, but log table said 6k+ games
-# TODO: Also probably need to review game counts when only one color is requested
+# TODO: Casing; pgn-extract apparently needs exact upper/lower case for parsing usernames. Look into returning proper casing from API call if successful
 
 
 def main():
@@ -23,10 +23,10 @@ def main():
         level=logging.INFO
     )
 
-    root_path = func.get_config(os.path.dirname(os.path.dirname(__file__)), 'rootPath')
+    root_path = misc.get_config('rootPath', CONFIG_FILE)
     vrs_num = '2.0'
-    config = func.get_config(os.path.dirname(os.path.dirname(__file__)), 'data')
-    writelog = func.get_config(os.path.dirname(os.path.dirname(__file__)), 'writeLog')
+    config = misc.get_config('data', CONFIG_FILE)
+    writelog = misc.get_config('writeLog', CONFIG_FILE)
     if not config['useConfig']:
         parser = argparse.ArgumentParser(
             description='Chess.com and Lichess Game Downloader',

@@ -1,0 +1,17 @@
+{
+	"connectionString_chessDB": "Driver={ODBC Driver 17 for SQL Server};Server=localhost;Database=chessDB;UID=username;PWD=password;",
+	"CDC_UserAgent": "{'User-Agent': 'Windows (Python 3.12.0) (username: MyUsername; contact: email@domain.com'}",
+	"rootPath": "C:Chess/Scripts",
+	"nameDelimiter": "$$",
+	"writeLog": false,
+	"data": {
+		"useConfig": false,
+		"player": "MagnusCarlsen",
+		"site": "Chess.com",
+		"timecontrol": "",
+		"color": "",
+		"startdate": "",
+		"enddate": "",
+		"outpath": ""
+	}
+}

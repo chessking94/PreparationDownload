@@ -3,23 +3,24 @@ import logging
 import os
 import re
 
+from automation import misc
 import pandas as pd
 import pyodbc as sql
 import requests
 
-import func
+from . import CONFIG_FILE
 import queries as qry
 import validation as v
 
 
 def lichess_games(name, basepath):
     # download Lichess user games
-    nd = func.get_config(os.path.dirname(os.path.dirname(__file__)), 'nameDelimiter')
+    nd = misc.get_config('nameDelimiter', CONFIG_FILE)
     dload_path = os.path.join(basepath, 'Lichess')
     if not os.path.isdir(dload_path):
         os.mkdir(dload_path)
 
-    conn_str = func.get_conf('SqlServerConnectionStringTrusted')
+    conn_str = misc.get_config('connectionString_chessDB', CONFIG_FILE)
     conn = sql.connect(conn_str)
     if len(name) == 1:
         if name[0].upper() == 'CUSTOM':  # backdoor to allow me to download custom datasets based on the original Excel selection process
@@ -45,7 +46,7 @@ def lichess_games(name, basepath):
 
     if rec_ct > 0:
         logging.info('Lichess game download started')
-        token_value = func.get_conf('LichessAPIToken')
+        token_value = misc.get_conf('lichessAPIToken', CONFIG_FILE)
 
         # get pgns
         for i in users:
