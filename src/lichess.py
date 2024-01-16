@@ -8,7 +8,7 @@ import pandas as pd
 import pyodbc as sql
 import requests
 
-from . import CONFIG_FILE
+from constants import CONFIG_FILE
 import queries as qry
 import validation as v
 
@@ -46,7 +46,7 @@ def lichess_games(name, basepath):
 
     if rec_ct > 0:
         logging.info('Lichess game download started')
-        token_value = misc.get_conf('lichessAPIToken', CONFIG_FILE)
+        token_value = misc.get_config('lichessAPIToken', CONFIG_FILE)
 
         # get pgns
         for i in users:

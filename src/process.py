@@ -7,7 +7,7 @@ from automation import misc
 import chess
 import chess.pgn
 
-from . import CONFIG_FILE
+from constants import CONFIG_FILE
 import func
 
 

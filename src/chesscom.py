@@ -11,7 +11,7 @@ import pandas as pd
 import pyodbc as sql
 import requests
 
-from . import CONFIG_FILE
+from constants import CONFIG_FILE
 import queries as qry
 import validation as v
 

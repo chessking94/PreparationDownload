@@ -4,7 +4,7 @@ from automation import misc
 import pandas as pd
 import pyodbc as sql
 
-from . import CONFIG_FILE
+from constants import CONFIG_FILE
 
 
 def custom(src, delim):

@@ -1,4 +1,4 @@
-automation @ file:///X:/Development/repo/Automation/release/automation-1.6.1.tar.gz#sha256=9f0674206503004e772ee96f4ff3db3e3f8ede136c5839582dec0d6fa7db3b12
+automation @ file:///X:/Development/repo/Automation/release/automation-1.6.2.tar.gz#sha256=49edc09bad7c66478b8a9f5b141a920c29303fba3887aa834cc0db1cae7d4f4b
 chess==1.10.1
 pandas==2.1.4
 pyodbc==5.0.1

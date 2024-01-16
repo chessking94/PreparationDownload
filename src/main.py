@@ -4,7 +4,7 @@ import logging
 
 from automation import misc
 
-from . import CONFIG_FILE
+from constants import CONFIG_FILE
 import func
 import queries
 import validation as v
