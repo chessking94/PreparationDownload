@@ -2,7 +2,7 @@ import logging
 
 from automation import misc
 import pandas as pd
-import pyodbc as sql
+import sqlalchemy as sa
 
 from constants import CONFIG_FILE
 
@@ -52,7 +52,12 @@ AND FirstName = '{fname}'
 
 def write_log(wr_type, player, site, timecontrol, color, startdate, enddate, outpath, dl_time, game_ct):
     conn_str = misc.get_config('connectionString_chessDB', CONFIG_FILE)
-    conn = sql.connect(conn_str)
+    connection_url = sa.engine.URL.create(
+        drivername='mssql+pyodbc',
+        query={"odbc_connect": conn_str}
+    )
+    engine = sa.create_engine(connection_url)
+    conn = engine.connect().connection
 
     # possible null handling
     player = f"'{player}'"

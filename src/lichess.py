@@ -5,8 +5,8 @@ import re
 
 from automation import misc
 import pandas as pd
-import pyodbc as sql
 import requests
+import sqlalchemy as sa
 
 from constants import CONFIG_FILE
 import queries as qry
@@ -21,7 +21,12 @@ def lichess_games(name, basepath):
         os.mkdir(dload_path)
 
     conn_str = misc.get_config('connectionString_chessDB', CONFIG_FILE)
-    conn = sql.connect(conn_str)
+    connection_url = sa.engine.URL.create(
+        drivername='mssql+pyodbc',
+        query={"odbc_connect": conn_str}
+    )
+    engine = sa.create_engine(connection_url)
+    conn = engine.connect().connection
     if len(name) == 1:
         if name[0].upper() == 'CUSTOM':  # backdoor to allow me to download custom datasets based on the original Excel selection process
             qry_text = qry.custom(src='Lichess', delim=nd)
