@@ -57,7 +57,6 @@ def write_log(wr_type, player, site, timecontrol, color, startdate, enddate, out
         query={"odbc_connect": conn_str}
     )
     engine = sa.create_engine(connection_url)
-    conn = engine.connect().connection
 
     # possible null handling
     player = f"'{player}'"
@@ -68,20 +67,23 @@ def write_log(wr_type, player, site, timecontrol, color, startdate, enddate, out
     enddate = 'NULL' if enddate is None else f"'{enddate}'"
     outpath = 'NULL' if outpath is None else f"'{outpath}'"
 
-    csr = conn.cursor()
     sql_cmd = ''
     if wr_type == 'New':
         sql_cmd = 'INSERT INTO ChessWarehouse.dbo.DownloadLog (Player, Site, TimeControl, Color, StartDate, EndDate, OutPath) VALUES '
         sql_cmd = sql_cmd + f"({player}, {site}, {timecontrol}, {color}, {startdate}, {enddate}, {outpath})"
     elif wr_type == 'Update':
         qry_text = 'SELECT MAX(DownloadID) FROM ChessWarehouse.dbo.DownloadLog'
-        qry_rec = pd.read_sql(qry_text, conn).values.tolist()
+        qry_rec = pd.read_sql(qry_text, engine).values.tolist()
         curr_id = int(qry_rec[0][0])
 
         sql_cmd = f"UPDATE ChessWarehouse.dbo.DownloadLog SET DownloadStatus = 'Complete', DownloadSeconds = {dl_time}, DownloadGames = {game_ct} WHERE DownloadID = {curr_id}"
 
     if sql_cmd != '':
+        conn = engine.connect().connection
+        csr = conn.cursor()
         logging.debug(sql_cmd)
         csr.execute(sql_cmd)
         conn.commit()
-    conn.close()
+        conn.close()
+
+    engine.dispose()

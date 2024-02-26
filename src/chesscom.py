@@ -30,7 +30,6 @@ def chesscom_games(name, basepath):
         query={"odbc_connect": conn_str}
     )
     engine = sa.create_engine(connection_url)
-    conn = engine.connect().connection
     if len(name) == 1:
         if name[0].upper() == 'CUSTOM':  # backdoor to allow me to download custom datasets based on the original Excel selection process
             qry_text = qry.custom(src='Chess.com', delim=nd)
@@ -39,9 +38,9 @@ def chesscom_games(name, basepath):
     else:
         qry_text = qry.person(src='Chess.com', delim=nd, lname=name[0], fname=name[1])
     logging.debug(qry_text.replace('\n', ' '))
-    users = pd.read_sql(qry_text, conn).values.tolist()
+    users = pd.read_sql(qry_text, engine).values.tolist()
+    engine.dispose()
     rec_ct = len(users)
-    conn.close()
 
     repl_nm = 1
     if len(name) == 1 and name[0].upper() != 'CUSTOM' and rec_ct == 0:  # username was passed, not in SQL table
