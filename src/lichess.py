@@ -35,6 +35,7 @@ def lichess_games(name, basepath):
         qry_text = qry.person(src='Lichess', delim=nd, lname=name[0], fname=name[1])
     logging.debug(qry_text.replace('\n', ' '))
     users = pd.read_sql(qry_text, engine).values.tolist()
+    engine.dispose()
     rec_ct = len(users)
 
     repl_nm = 1
