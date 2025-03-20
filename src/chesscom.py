@@ -23,7 +23,7 @@ def chesscom_games(name, basepath):
         os.mkdir(dload_path)
     dte = dt.datetime.now().strftime('%Y%m%d%H%M%S')
 
-    conn_str = func.get_conf('SqlServerConnectionStringTrusted')
+    conn_str = os.getenv('ConnectionStringOdbcRelease')
     conn = sql.connect(conn_str)
     if len(name) == 1:
         if name[0].upper() == 'CUSTOM':  # backdoor to allow me to download custom datasets based on the original Excel selection process
@@ -49,7 +49,7 @@ def chesscom_games(name, basepath):
 
     if rec_ct > 0:
         # get pgns
-        headers = eval(func.get_conf('CDC_UserAgent'))
+        headers = eval(os.getenv('CDCUserAgent'))
         for i in users:
             archive_url = f'https://api.chess.com/pub/player/{i[1]}/games/archives'
             with requests.get(archive_url, headers=headers) as resp:

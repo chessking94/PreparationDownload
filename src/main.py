@@ -12,9 +12,7 @@ from process import process_games
 
 # TODO: Support for variants
 # TODO: Additional arguments for ECO, minimum number of moves, etc. Might require pgn-extract loops
-# TODO: Review formatting of paths in logging calls
-# TODO: Running VRK/Lichess resulted in an empty game file, but log table said 6k+ games
-# TODO: Also probably need to review game counts when only one color is requested
+# TODO: Casing; pgn-extract apparently needs exact upper/lower case for parsing usernames. Look into returning proper casing from API call if successful
 
 
 def main():

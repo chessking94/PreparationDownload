@@ -19,7 +19,7 @@ def lichess_games(name, basepath):
     if not os.path.isdir(dload_path):
         os.mkdir(dload_path)
 
-    conn_str = func.get_conf('SqlServerConnectionStringTrusted')
+    conn_str = os.getenv('ConnectionStringOdbcRelease')
     conn = sql.connect(conn_str)
     if len(name) == 1:
         if name[0].upper() == 'CUSTOM':  # backdoor to allow me to download custom datasets based on the original Excel selection process
@@ -45,7 +45,7 @@ def lichess_games(name, basepath):
 
     if rec_ct > 0:
         logging.info('Lichess game download started')
-        token_value = func.get_conf('LichessAPIToken')
+        token_value = os.getenv('LichessAPIToken')
 
         # get pgns
         for i in users:

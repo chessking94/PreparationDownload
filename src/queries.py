@@ -1,9 +1,8 @@
 import logging
+import os
 
 import pandas as pd
 import pyodbc as sql
-
-from func import get_conf
 
 
 def custom(src, delim):
@@ -12,7 +11,7 @@ SELECT
 ISNULL(LastName, '') + '{delim}' + ISNULL(FirstName, '') AS PlayerName,
 Username
 
-FROM UsernameXRef
+FROM ChessWarehouse.dbo.UsernameXRef
 
 WHERE Source = '{src}'
 AND DownloadFlag = 1
@@ -26,7 +25,7 @@ SELECT
 ISNULL(LastName, '') + '{delim}' + ISNULL(FirstName, '') AS PlayerName,
 Username
 
-FROM UsernameXRef
+FROM ChessWarehouse.dbo.UsernameXRef
 
 WHERE Source = '{src}'
 AND Username = '{usr}'
@@ -40,7 +39,7 @@ SELECT
 ISNULL(LastName, '') + '{delim}' + ISNULL(FirstName, '') AS PlayerName,
 Username
 
-FROM UsernameXRef
+FROM ChessWarehouse.dbo.UsernameXRef
 
 WHERE Source = '{src}'
 AND LastName = '{lname}'
@@ -50,7 +49,7 @@ AND FirstName = '{fname}'
 
 
 def write_log(wr_type, player, site, timecontrol, color, startdate, enddate, outpath, dl_time, game_ct):
-    conn_str = get_conf('SqlServerConnectionStringTrusted')
+    conn_str = os.getenv('ConnectionStringOdbcRelease')
     conn = sql.connect(conn_str)
 
     # possible null handling
@@ -65,14 +64,14 @@ def write_log(wr_type, player, site, timecontrol, color, startdate, enddate, out
     csr = conn.cursor()
     sql_cmd = ''
     if wr_type == 'New':
-        sql_cmd = 'INSERT INTO DownloadLog (Player, Site, TimeControl, Color, StartDate, EndDate, OutPath) VALUES '
+        sql_cmd = 'INSERT INTO ChessWarehouse.dbo.DownloadLog (Player, Site, TimeControl, Color, StartDate, EndDate, OutPath) VALUES '
         sql_cmd = sql_cmd + f"({player}, {site}, {timecontrol}, {color}, {startdate}, {enddate}, {outpath})"
     elif wr_type == 'Update':
-        qry_text = 'SELECT MAX(DownloadID) FROM DownloadLog'
+        qry_text = 'SELECT MAX(DownloadID) FROM ChessWarehouse.dbo.DownloadLog'
         qry_rec = pd.read_sql(qry_text, conn).values.tolist()
         curr_id = int(qry_rec[0][0])
 
-        sql_cmd = f"UPDATE DownloadLog SET DownloadStatus = 'Complete', DownloadSeconds = {dl_time}, DownloadGames = {game_ct} WHERE DownloadID = {curr_id}"
+        sql_cmd = f"UPDATE ChessWarehouse.dbo.DownloadLog SET DownloadStatus = 'Complete', DownloadSeconds = {dl_time}, DownloadGames = {game_ct} WHERE DownloadID = {curr_id}"
 
     if sql_cmd != '':
         logging.debug(sql_cmd)
